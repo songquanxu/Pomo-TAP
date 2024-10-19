@@ -5,98 +5,114 @@ import UserNotifications
 import os
 import CoreData
 
-class TimerModel: ObservableObject {
-    @Published var currentPhase = 0
-    @Published var remainingTime = 25 * 60
-    @Published var timerRunning = false
-    @Published var completedCycles = 0
-    @Published var isAppActive = true
-    @Published var lastBackgroundDate: Date?
-    @Published var hasSkippedInCurrentCycle = false
-    @Published var isResetState = false
-    @Published var isInDecisionMode = false
-    @Published var isInCooldownMode = false
-    @Published var currentCycleCompleted = false
-    @Published var tomatoRingPosition: Angle = .zero
-    @Published var isTransitioning = false
-    @Published var transitionProgress: CGFloat = 0
-    @Published var decisionStartAngle: Angle = .zero
-    @Published var decisionRingPosition: Angle = .zero
-    @Published var cooldownStartAngle: Angle = .zero
-    @Published var cooldownEndAngle: Angle = .zero
-    @Published var cooldownRingPosition: Angle = .zero
-    @Published var isInResetMode = false
-    @Published var decisionProgress: CGFloat = 0
-    @Published var cooldownProgress: CGFloat = 0
-    @Published var decisionEndAngle: Angle = .zero  // 添加这行
+// 定义阶段状态的枚举，表示番茄钟的不同状态
+enum PhaseStatus: String, Codable {
+    case notStarted, current, normalCompleted, skipped
+}
 
-    var phases: [Phase] = []
-    var phaseCompletionStatus: [PhaseStatus] = []
-    var cyclePhaseCount = 0
-    var lastPhase = 0
-    var lastUsageTime: TimeInterval = 0
-    var lastCycleCompletionTime: TimeInterval = 0
+// 定义一个阶段结构体，包含持续时间、名称和状态
+struct Phase: Codable {
+    let duration: Int // 阶段的持续时间（以秒为单位）
+    let name: String // 阶段的名称
+    var status: PhaseStatus // 阶段的状态
+}
+
+// TimerModel 类，负责管理番茄钟的状态和逻辑
+@MainActor
+class TimerModel: NSObject, ObservableObject {
+    @Published var phases: [Phase] // 当前阶段数组
+    @Published var currentPhaseIndex: Int // 当前阶段索引
+    @Published var remainingTime: Int // 剩余时间
+    @Published var timerRunning: Bool // 计时器是否正在运行
+    @Published var completedCycles: Int // 完成的周期数
+    @Published var isAppActive = true // 应用是否处于活动状态
+    @Published var lastBackgroundDate: Date? // 上次进入后台的时间
+    @Published var hasSkippedInCurrentCycle = false // 当前周期是否跳过
+    @Published var isResetState = false // 是否处于重置状态
+    @Published var isInDecisionMode = false // 是否处于决策模式
+    @Published var isInCooldownMode = false // 是否处于冷却模式
+    @Published var currentCycleCompleted = false // 当前周期是否完成
+    @Published var tomatoRingPosition: Angle = .zero // 番茄环的位置
+    @Published var isTransitioning = false // 是否正在过渡
+    @Published var transitionProgress: CGFloat = 0 // 过渡进度
+    @Published var decisionStartAngle: Angle = .zero // 决策开始角度
+    @Published var decisionRingPosition: Angle = .zero // 决策环位置
+    @Published var cooldownStartAngle: Angle = .zero // 冷却开始角度
+    @Published var cooldownEndAngle: Angle = .zero // 冷却结束角度
+    @Published var cooldownRingPosition: Angle = .zero // 冷却环位置
+    @Published var isInResetMode: Bool = false // 是否处于重置模式
+    @Published var decisionProgress: CGFloat = 0 // 决策进度
+    @Published var cooldownProgress: CGFloat = 0 // 冷却进度
+    @Published var decisionEndAngle: Angle = .zero // 决策结束角度
+    @Published var phaseCompletionStatus: [PhaseStatus] = [] // 各阶段的完成状态
+    @Published var totalTime: Int = 0 // 总时间
+    @Published var notificationSent = false // 是否已发送通知
+    @Published var currentPhaseName: String = "" // 当前阶段名称
+
+    var cyclePhaseCount = 0 // 当前周期的阶段计数
+    var lastPhase = 0 // 上一个阶段索引
+    var lastUsageTime: TimeInterval = 0 // 上次使用时间
+    var lastCycleCompletionTime: TimeInterval = 0 // 上次周期完成时间
 
     private let userDefaults: UserDefaults
     private let logger = Logger(subsystem: "com.yourcompany.pomoTAP", category: "TimerModel")
     private let persistentContainer: NSPersistentContainer
-    private var timer: AnyCancellable?
+    private var timer: DispatchSourceTimer?
     private var startTime: Date?
-    private var savedRemainingTime: Int?
+    private var pausedRemainingTime: Int?
     private var decisionTimer: Timer?
     private var cooldownTimer: Timer?
+    private var extendedSession: WKExtendedRuntimeSession?
+    var notificationDelegate: NotificationDelegate?
+    private var endTime: Date?
+    private let launchedBeforeKey = "launchedBefore"
 
-    init() {
-        self.userDefaults = UserDefaults(suiteName: "group.com.yourcompany.pomoTAP")!
-        persistentContainer = NSPersistentContainer(name: "PomoTAPModel")
-        persistentContainer.loadPersistentStores { (storeDescription, error) in
-            if let error = error as NSError? {
-                fatalError("Unresolved error \(error), \(error.userInfo)")
-            }
-        }
-        loadPhases()
-        loadState()
-        resetPhaseCompletionStatus()
-    }
-
-    private func loadPhases() {
-        do {
-            if let url = Bundle.main.url(forResource: "phases", withExtension: "json"),
-               let data = try? Data(contentsOf: url) {
-                phases = try JSONDecoder().decode([Phase].self, from: data)
-                logger.info("Successfully loaded phases from JSON")
-            } else {
-                throw NSError(domain: "com.yourcompany.pomoTAP", code: 1, userInfo: [NSLocalizedDescriptionKey: "Could not find or load phases.json"])
-            }
-        } catch {
-            logger.error("Error loading phases: \(error.localizedDescription)")
-            useDefaultPhases()
-        }
-    }
-
-    private func useDefaultPhases() {
-        phases = [
-            Phase(duration: 1500, name: "Work"),
-            Phase(duration: 300, name: "Short Break"),
-            Phase(duration: 1500, name: "Work"),
-            Phase(duration: 900, name: "Long Break")
+    // 初始化方法，设置初始阶段和状态
+    override init() {
+        let initialPhases = [
+            Phase(duration: 25 * 60, name: "Work", status: .current),
+            Phase(duration: 5 * 60, name: "Short Break", status: .notStarted),
+            Phase(duration: 25 * 60, name: "Work", status: .notStarted),
+            Phase(duration: 15 * 60, name: "Long Break", status: .notStarted)
         ]
-        logger.warning("Using default phases due to loading error")
+        
+        self.phases = initialPhases
+        self.currentPhaseIndex = 0
+        self.remainingTime = initialPhases[0].duration
+        self.timerRunning = false
+        self.completedCycles = 0
+        self.totalTime = initialPhases[0].duration
+        self.currentPhaseName = initialPhases[0].name
+
+        self.userDefaults = UserDefaults.standard
+        self.persistentContainer = NSPersistentContainer(name: "PomoTAPModel")
+
+        super.init()
+        self.notificationDelegate = NotificationDelegate(timerModel: self)
+
+        self.persistentContainer.loadPersistentStores { (storeDescription, error) in
+            if let error = error as NSError? {
+                self.logger.error("Unresolved error \(error), \(error.userInfo)")
+            }
+        }
+       
+        if !userDefaults.bool(forKey: launchedBeforeKey) {
+            resetCycle()
+            userDefaults.set(true, forKey: launchedBeforeKey)
+        } else {
+            loadState()
+        }
+        self.loadPhaseCompletionStatus()
+    }
+    
+    // 获取当前阶段
+    var currentPhase: Phase {
+        return phases[currentPhaseIndex]
     }
 
-    private func loadState() {
-        currentPhase = userDefaults.integer(forKey: "currentPhase")
-        remainingTime = userDefaults.integer(forKey: "remainingTime")
-        timerRunning = userDefaults.bool(forKey: "timerRunning")
-        completedCycles = userDefaults.integer(forKey: "completedCycles")
-        hasSkippedInCurrentCycle = userDefaults.bool(forKey: "hasSkippedInCurrentCycle")
-        currentCycleCompleted = userDefaults.bool(forKey: "currentCycleCompleted")
-        lastUsageTime = userDefaults.double(forKey: "lastUsageTime")
-        lastCycleCompletionTime = userDefaults.double(forKey: "lastCycleCompletionTime")
-    }
-
+    // 保存状态
     func saveState() {
-        userDefaults.set(currentPhase, forKey: "currentPhase")
+        userDefaults.set(currentPhaseIndex, forKey: "currentPhase")
         userDefaults.set(remainingTime, forKey: "remainingTime")
         userDefaults.set(timerRunning, forKey: "timerRunning")
         userDefaults.set(completedCycles, forKey: "completedCycles")
@@ -104,140 +120,189 @@ class TimerModel: ObservableObject {
         userDefaults.set(currentCycleCompleted, forKey: "currentCycleCompleted")
         userDefaults.set(lastUsageTime, forKey: "lastUsageTime")
         userDefaults.set(lastCycleCompletionTime, forKey: "lastCycleCompletionTime")
+        userDefaults.set(totalTime, forKey: "totalTime")
+        userDefaults.set(currentPhaseName, forKey: "currentPhaseName")
         userDefaults.set(Date(), forKey: "lastUpdateTime")
+        savePhaseCompletionStatus()
     }
 
+    // 重置阶段完成状态
     func resetPhaseCompletionStatus() {
         phaseCompletionStatus = Array(repeating: .notStarted, count: phases.count)
-        phaseCompletionStatus[currentPhase] = .current
+        phaseCompletionStatus[currentPhaseIndex] = .current
     }
 
+    // 更新重置模式
+    func updateResetMode() {
+        isInResetMode = isInDecisionMode || isInCooldownMode
+    }
+
+    // 开始决策模式
     func startDecisionMode() {
-        DispatchQueue.main.async {
-            self.isInDecisionMode = true
-            self.isInCooldownMode = false
-            self.decisionProgress = 0
-            self.isResetState = true
-            
-            self.decisionStartAngle = self.tomatoRingPosition
-            self.decisionEndAngle = Angle(degrees: 360)
-            self.decisionRingPosition = self.decisionStartAngle
-            
-            let duration = 3.0
-            
-            self.decisionTimer?.invalidate()
-            self.decisionTimer = Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { [weak self] timer in
+        guard !isInCooldownMode else { return }
+        
+        isInDecisionMode = true
+        isInCooldownMode = false
+        decisionProgress = 0
+        isResetState = true
+        
+        decisionStartAngle = tomatoRingPosition
+        decisionEndAngle = Angle(degrees: 360)
+        decisionRingPosition = decisionStartAngle
+        
+        let duration = 3.0
+        
+        decisionTimer?.invalidate()
+        decisionTimer = Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { [weak self] timer in
+            Task { @MainActor [weak self] in
                 guard let self = self else { timer.invalidate(); return }
-                self.decisionProgress += 0.01 / duration
-                self.decisionRingPosition = self.decisionStartAngle + Angle(degrees: (self.decisionEndAngle.degrees - self.decisionStartAngle.degrees) * self.decisionProgress)
-                
-                if self.decisionProgress >= 0.66 && self.decisionProgress < 0.67 {
-                    WKInterfaceDevice.current().play(.notification)
-                } else if self.decisionProgress >= 0.33 && self.decisionProgress < 0.34 {
-                    WKInterfaceDevice.current().play(.notification)
-                }
-                
+                self.updateDecisionProgress(duration: duration)
                 if self.decisionProgress >= 1 {
-                    self.completeSkip()
+                    if self.isInDecisionMode {
+                        await self.completeSkip() // 移除 await
+                    }
                     timer.invalidate()
                 }
             }
         }
+        
+        updateResetMode()
     }
 
+    // 更新决策进度
+    private func updateDecisionProgress(duration: Double) {
+        decisionProgress += 0.01 / duration
+        decisionRingPosition = decisionStartAngle + Angle(degrees: (decisionEndAngle.degrees - decisionStartAngle.degrees) * decisionProgress)
+        
+        if decisionProgress >= 0.66 && decisionProgress < 0.67 {
+            WKInterfaceDevice.current().play(.notification)
+        } else if decisionProgress >= 0.33 && decisionProgress < 0.34 {
+            WKInterfaceDevice.current().play(.notification)
+        }
+    }
+
+    // 取消决策模式
     func cancelDecisionMode() {
-        DispatchQueue.main.async {
-            self.isInDecisionMode = false
-            self.decisionTimer?.invalidate()
-            self.startCooldownMode()
-        }
+        isInDecisionMode = false
+        decisionTimer?.invalidate()
+        startCooldownMode()
+        updateResetMode()
     }
-
-    func startCooldownMode() {
-        DispatchQueue.main.async {
-            self.isInCooldownMode = true
-            self.isInDecisionMode = false
-            self.isResetState = true
-            self.cooldownProgress = 0
-            
-            self.cooldownStartAngle = self.tomatoRingPosition
-            self.cooldownEndAngle = self.decisionRingPosition
-            self.cooldownRingPosition = self.cooldownEndAngle
-            
-            self.cooldownTimer?.invalidate()
-            self.cooldownTimer = Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { [weak self] timer in
+    
+    // 开始冷却模式
+    private func startCooldownMode() {
+        isInCooldownMode = true
+        isInDecisionMode = false
+        isResetState = true
+        cooldownProgress = 0
+        
+        cooldownStartAngle = tomatoRingPosition
+        cooldownEndAngle = decisionRingPosition
+        cooldownRingPosition = cooldownEndAngle
+        
+        cooldownTimer?.invalidate()
+        cooldownTimer = Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { [weak self] timer in
+            Task { @MainActor [weak self] in
                 guard let self = self else { timer.invalidate(); return }
-                self.cooldownProgress += 0.01 / 3.0
-                self.cooldownRingPosition = self.cooldownEndAngle - Angle(degrees: (self.cooldownEndAngle.degrees - self.cooldownStartAngle.degrees) * self.cooldownProgress)
+                self.updateCooldownProgress()
                 if self.cooldownProgress >= 1 {
-                    self.isInCooldownMode = false
-                    self.isResetState = false
-                    self.cooldownProgress = 0
+                    self.finishCooldown()
                     timer.invalidate()
                 }
             }
         }
+        
+        updateResetMode()
     }
 
-    func completeSkip() {
-        DispatchQueue.main.async {
-            self.isInDecisionMode = false
-            self.isInCooldownMode = false
-            self.decisionProgress = 0
-            self.skipPhase()
-        }
+    // 更新冷却进度
+    private func updateCooldownProgress() {
+        cooldownProgress += 0.01 / 3.0
+        cooldownRingPosition = cooldownEndAngle - Angle(degrees: (cooldownEndAngle.degrees - cooldownStartAngle.degrees) * cooldownProgress)
     }
 
+    // 完成冷却
+    private func finishCooldown() {
+        isInCooldownMode = false
+        isResetState = false
+        cooldownProgress = 0
+        updateResetMode()
+    }
+
+    // 完成跳过
+    func completeSkip() async { // 添加 async
+        isInDecisionMode = false
+        isInCooldownMode = false
+        isResetState = false
+        decisionProgress = 0
+        await moveToNextPhase(autoStart: true, skip: true) // 添加 await
+        updateResetMode()
+    }
+
+    // 跳阶段
     func skipPhase() {
         hasSkippedInCurrentCycle = true
         stopTimer()
-        moveToNextPhase(autoStart: true)
         isResetState = false
         WKInterfaceDevice.current().play(.notification)
+        updateResetMode()
     }
 
-    func startNextPhase() {
-        moveToNextPhase(autoStart: true)
+    // 开始下一个阶段
+    func startNextPhase() async { // 添加 async
+        isAppActive = true
+        await moveToNextPhase(autoStart: true, skip: false)
     }
 
-    func moveToNextPhase(autoStart: Bool = false) {
-        if !isAppActive {
-            sendNotification()
-            return
-        }
-        
+    // 移动到下一个阶段
+    func moveToNextPhase(autoStart: Bool, skip: Bool = false) async {
         startTransitionAnimation()
         
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-            self.phaseCompletionStatus[self.currentPhase] = self.hasSkippedInCurrentCycle ? .skipped : .normalCompleted
-            self.currentPhase = (self.currentPhase + 1) % self.phases.count
-            
-            if self.currentPhase == 0 {
-                self.completeCycle()
-            } else {
-                self.phaseCompletionStatus[self.currentPhase] = .current
-            }
-            
-            self.remainingTime = self.phases[self.currentPhase].duration
-            self.cyclePhaseCount += 1
-            
-            self.lastPhase = self.currentPhase
-            self.lastUsageTime = Date().timeIntervalSince1970
-            
-            self.stopTimer()
-            self.timerRunning = false
-            
-            self.tomatoRingPosition = .zero
-            
-            if autoStart {
-                self.startTimer()
-                self.timerRunning = true
-            }
-            
-            self.saveState()
+        let isSkipped = skip
+        let isNormalCompletion = remainingTime <= 0 && !isSkipped
+        
+        phaseCompletionStatus[currentPhaseIndex] = isNormalCompletion ? .normalCompleted : .skipped
+        savePhaseCompletionStatus()
+
+        currentPhaseIndex = (currentPhaseIndex + 1) % phases.count
+        
+        if currentPhaseIndex == 0 {
+            completeCycle()
+        } else {
+            phaseCompletionStatus[currentPhaseIndex] = .current
         }
+        
+        remainingTime = phases[currentPhaseIndex].duration
+        totalTime = phases[currentPhaseIndex].duration
+        cyclePhaseCount += 1
+        
+        lastPhase = currentPhaseIndex
+        lastUsageTime = Date().timeIntervalSince1970
+        
+        stopTimer()
+        timerRunning = false
+        
+        tomatoRingPosition = .zero
+        
+        currentPhaseName = phases[currentPhaseIndex].name
+        saveState()
+        updateResetMode()
+        
+        if isNormalCompletion {
+            sendHapticFeedback()
+        }
+
+        if autoStart {
+            await startTimer()
+        } else {
+            isResetState = true
+            updateResetMode()
+        }
+
+        NotificationCenter.default.post(name: .phaseChanged, object: self, userInfo: ["newPhase": currentPhaseIndex])
     }
 
+    // 完成周期
     private func completeCycle() {
         if !hasSkippedInCurrentCycle {
             completedCycles += 1
@@ -250,86 +315,149 @@ class TimerModel: ObservableObject {
         currentCycleCompleted = true
     }
 
-    func startTimer() {
-        if let savedTime = savedRemainingTime {
-            remainingTime = savedTime
-            savedRemainingTime = nil
+    // 切换计时器状态
+    func toggleTimer() async {
+        if timerRunning {
+            playSound(.stop)
+            stopTimer()
+        } else {
+            playSound(.start)
+            await startTimer()
         }
-        
-        startTime = Date().addingTimeInterval(-Double(phases[currentPhase].duration - remainingTime))
-        timer = Timer.publish(every: 1, on: .main, in: .common)
-            .autoconnect()
-            .sink { [weak self] _ in
-                self?.updateTimer()
-            }
     }
 
-    func stopTimer() {
+    // 启动计时器
+    private func startTimer() async {
+        guard !timerRunning else { return } // 防止重复启动
+        
+        startTime = Date()
+        endTime = startTime?.addingTimeInterval(Double(remainingTime))
+        
+        timer?.cancel()
+        timer = DispatchSource.makeTimerSource(queue: .main)
+        timer?.schedule(deadline: .now(), repeating: .seconds(1))
+        timer?.setEventHandler { [weak self] in
+            self?.updateTimer()
+        }
+        timer?.resume()
+        
+        await startExtendedSession()
+        timerRunning = true
+        
+        // 只有在非恢复状态下才播放声音
+/*         if startTime == endTime {
+            playSound(.start)
+        } */
+        
+        logger.info("计时器已启动。当前阶段: \(self.currentPhaseName)，剩余时间: \(self.remainingTime) 秒。")
+    }
+
+    // 停止计时器
+    private func stopTimer() {
+        guard timerRunning else { return } // 防止重复停止
+        
         timer?.cancel()
         timer = nil
-        savedRemainingTime = remainingTime
-        startTime = nil
+        pausedRemainingTime = remainingTime
+        stopExtendedSession()
+        timerRunning = false
+
+        logger.info("计时器已停止。剩余时间: \(self.remainingTime) 秒。")
     }
 
+    // 更新计时器
     func updateTimer() {
-        let elapsedTime: Int
-        if let lastBackgroundDate = lastBackgroundDate {
-            elapsedTime = Int(Date().timeIntervalSince(lastBackgroundDate))
-            self.lastBackgroundDate = nil
-        } else {
-            elapsedTime = Int(Date().timeIntervalSince(self.startTime ?? Date()))
+        guard timerRunning, let endTime = endTime else { return }
+        let now = Date()
+        let newRemainingTime = max(Int(endTime.timeIntervalSince(now)), 0)
+        
+        if newRemainingTime != self.remainingTime {
+            self.remainingTime = newRemainingTime
+            updateTomatoRingPosition()
         }
         
-        let newRemainingTime = max(0, min(phases[currentPhase].duration, phases[currentPhase].duration - elapsedTime))
-        
-        if newRemainingTime == 0 && remainingTime > 0 {
-            WKInterfaceDevice.current().play(.success)
+        // 每分钟同步一次系统时间
+        if Int(now.timeIntervalSince1970) % 60 == 0 {
+            syncWithSystemTime()
         }
         
-        remainingTime = newRemainingTime
-        updateTomatoRingPosition()
-        
-        if remainingTime == 0 {
-            moveToNextPhase(autoStart: false)
+        if self.remainingTime == 0 {
+            stopTimer()
+            handlePhaseCompletion()
         }
     }
 
+    private func syncWithSystemTime() {
+        guard let endTime = endTime else {
+            logger.error("endTime 未设置，无法同步时间。")
+            return
+        }
+        let now = Date()
+        let adjustedRemainingTime = max(Int(endTime.timeIntervalSince(now)), 0)
+        let timeDifference = abs(adjustedRemainingTime - self.remainingTime)
+        
+        if timeDifference > 1 {
+            self.remainingTime = adjustedRemainingTime
+            logger.info("时间同步成功。调整后的剩余时间: \(self.remainingTime) 秒。")
+        } else {
+            logger.debug("时间同步检查通过。当前剩余时间: \(self.remainingTime) 秒，无需调整。")
+        }
+    }
+
+    // 处理阶段完成##
+    private func handlePhaseCompletion() {
+        stopTimer()
+        
+        if WKExtension.shared().applicationState == .active {
+            playSound(.success)
+            sendHapticFeedback()
+        Task {
+                await moveToNextPhase(autoStart: false, skip: false)
+            } 
+        } else {    
+            notificationDelegate?.sendNotification(for: .phaseCompleted, currentPhaseDuration: phases[currentPhaseIndex].duration / 60, nextPhaseDuration: phases[(currentPhaseIndex + 1) % phases.count].duration / 60)
+        }
+
+    }
+
+    // 更新番茄环位置
     func updateTomatoRingPosition() {
-        let progress = 1 - Double(remainingTime) / Double(phases[currentPhase].duration)
+        let progress = 1 - Double(remainingTime) / Double(totalTime)
         tomatoRingPosition = Angle(degrees: 360 * progress)
     }
 
-    func toggleTimer() {
-        if timerRunning {
-            stopTimer()
-        } else {
-            startTimer()
-        }
-        timerRunning.toggle()
-        saveState()
+    // 播放声音
+    private func playSound(_ soundType: WKHapticType) {
+        WKInterfaceDevice.current().play(soundType)
     }
 
+    // 重置周期
     func resetCycle() {
-        DispatchQueue.main.async {
-            self.currentPhase = 0
-            self.remainingTime = self.phases[self.currentPhase].duration
-            self.cyclePhaseCount = 0
-            self.hasSkippedInCurrentCycle = false
-            self.isInResetMode = false
-            self.stopTimer()
-            self.timerRunning = false
-            self.isResetState = false
-            self.isInDecisionMode = false
-            self.isInCooldownMode = false
-            self.resetPhaseCompletionStatus()
-            self.currentCycleCompleted = false
-            self.tomatoRingPosition = .zero
-            self.updateTomatoRingPosition()
-            WKInterfaceDevice.current().play(.retry)
-            self.saveState()
-        }
+        cooldownTimer?.invalidate()
+        decisionTimer?.invalidate()
+        
+        currentPhaseIndex = 0
+        remainingTime = phases[currentPhaseIndex].duration
+        totalTime = phases[currentPhaseIndex].duration
+        cyclePhaseCount = 0
+        hasSkippedInCurrentCycle = false
+        stopTimer()
+        timerRunning = false
+        isResetState = false
+        isInDecisionMode = false
+        isInCooldownMode = false
+        resetPhaseCompletionStatus()
+        currentCycleCompleted = false
+        tomatoRingPosition = .zero
+        currentPhaseName = phases[currentPhaseIndex].name
+        updateTomatoRingPosition()
+        WKInterfaceDevice.current().play(.retry)
+        saveState()
+        updateResetMode()
+        pausedRemainingTime = nil
     }
-
+   
+    // 检查并更新完成的周期
     func checkAndUpdateCompletedCycles() {
         let currentTime = Date().timeIntervalSince1970
         if currentTime - lastCycleCompletionTime >= 86400 {
@@ -339,47 +467,268 @@ class TimerModel: ObservableObject {
         }
     }
 
+    // 启动过渡动画
     func startTransitionAnimation() {
         isTransitioning = true
         transitionProgress = 0
         
-        Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { timer in  // 修改这行
-            self.transitionProgress += 0.05
-            if self.transitionProgress >= 1 {
-                self.isTransitioning = false
-                timer.invalidate()
+        Timer.scheduledTimer(withTimeInterval: 0.01, repeats: true) { [weak self] timer in
+            Task { @MainActor [weak self] in
+                guard let self = self else { timer.invalidate(); return }
+                self.transitionProgress += 0.05
+                if self.transitionProgress >= 1 {
+                    self.isTransitioning = false
+                    timer.invalidate()
+                }
             }
         }
     }
 
-    func sendNotification() {
-        let content = UNMutableNotificationContent()
-        content.title = NSLocalizedString("Pomodoro Completed", comment: "")
-        content.body = NSLocalizedString("Great job! You've completed a Pomodoro cycle.", comment: "")
-        content.sound = .default
-        
-        let startAction = UNNotificationAction(identifier: "START", title: NSLocalizedString("Start Next Phase", comment: ""), options: .foreground)
-        let ignoreAction = UNNotificationAction(identifier: "IGNORE", title: NSLocalizedString("Ignore", comment: ""), options: .destructive)
-        
-        let category = UNNotificationCategory(identifier: "TIMER_ENDED", actions: [startAction, ignoreAction], intentIdentifiers: [])
-        
-        UNUserNotificationCenter.current().setNotificationCategories([category])
-        content.categoryIdentifier = "TIMER_ENDED"
-        
-        let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: nil)
-        UNUserNotificationCenter.current().add(request) { error in
+    // 播放触觉反馈
+    private func sendHapticFeedback() {
+        WKInterfaceDevice.current().play(.success)
+    }
+
+    // 启动扩展会话
+    func startExtendedSession() async {
+        if extendedSession == nil {
+            extendedSession = WKExtendedRuntimeSession()
+            extendedSession?.delegate = self
+            extendedSession?.start()
+            logger.info("尝试启动扩展运行时会话")
+        }
+    }
+
+    // 停止扩展会话
+    func stopExtendedSession() {
+        extendedSession?.invalidate()
+        extendedSession = nil
+        logger.info("扩展运行时会话已停止")
+    }
+
+    // 应用变为活动状态
+    func appBecameActive() async {
+        isAppActive = true
+        if timerRunning {
+            syncWithSystemTime()
+            checkAndHandleTimeSyncIssues()
+            if remainingTime > 0 {
+                await startTimer()
+            } else {
+                handlePhaseCompletion()
+            }
+        } else {
+            // 检查是否需要移动到下一个阶段
+            if remainingTime <= 0 {
+                await moveToNextPhase(autoStart: false, skip: false)
+            }
+        }
+    }
+
+    // 应用变为非活动状态
+    func appBecameInactive() {
+        saveState()
+        logger.info("应用变为非活动状态，已保存当前状态。")
+    }
+
+    // 应用进入后台
+    func appEnteredBackground() {
+        scheduleBackgroundRefresh()
+    }
+
+    // 安排后台刷新
+    func scheduleBackgroundRefresh() {
+        let refreshDate = Date().addingTimeInterval(60)
+        WKApplication.shared().scheduleBackgroundRefresh(withPreferredDate: refreshDate, userInfo: nil) { [weak self] error in
             if let error = error {
-                self.logger.error("Error sending notification: \(error.localizedDescription)")
+                self?.logger.error("安排后台刷新失败: \(error.localizedDescription)")
+            } else {
+                self?.logger.info("后台刷新已成功安排，刷新时间: \(refreshDate)。")
             }
         }
     }
 
-    enum PhaseStatus {
-        case notStarted, current, normalCompleted, skipped
+    // 在后台更新计时器
+    func updateInBackground() async {
+        if timerRunning {
+            syncWithSystemTime()
+            if remainingTime <= 0 {
+                handlePhaseCompletion()
+            } else {
+                scheduleBackgroundRefresh()
+            }
+        }
+        
+        saveState()
     }
 
-    struct Phase: Codable {
-        let duration: Int
-        let name: String
+    // 设置通知代理
+    func setNotificationDelegate(_ delegate: NotificationDelegate) {
+        self.notificationDelegate = delegate
+    }
+
+    // 移动到指定阶段
+    func moveToPhase(phaseIndex: Int) {
+        currentPhaseIndex = phaseIndex
+        remainingTime = phases[currentPhaseIndex].duration
+        totalTime = phases[currentPhaseIndex].duration
+        currentPhaseName = phases[currentPhaseIndex].name
+        updateTomatoRingPosition()
+        saveState()
+    }
+   
+    // 加载状态
+    private func loadState() {
+        currentPhaseIndex = userDefaults.integer(forKey: "currentPhase")
+        remainingTime = userDefaults.integer(forKey: "remainingTime")
+        timerRunning = userDefaults.bool(forKey: "timerRunning")
+        completedCycles = userDefaults.integer(forKey: "completedCycles")
+        hasSkippedInCurrentCycle = userDefaults.bool(forKey: "hasSkippedInCurrentCycle")
+        currentCycleCompleted = userDefaults.bool(forKey: "currentCycleCompleted")
+        lastUsageTime = userDefaults.double(forKey: "lastUsageTime")
+        lastCycleCompletionTime = userDefaults.double(forKey: "lastCycleCompletionTime")
+        totalTime = userDefaults.integer(forKey: "totalTime")
+        currentPhaseName = userDefaults.string(forKey: "currentPhaseName") ?? ""
+        loadPhaseCompletionStatus()
+        updateTomatoRingPosition()
+    }
+
+    // 加载阶段完成状态
+    private func loadPhaseCompletionStatus() {
+        if let data = userDefaults.data(forKey: "phaseCompletionStatus"),
+           let statuses = try? JSONDecoder().decode([PhaseStatus].self, from: data) {
+            phaseCompletionStatus = statuses
+        } else {
+            resetPhaseCompletionStatus()
+        }
+    }
+
+    // 保存阶段完成状态
+    private func savePhaseCompletionStatus() {
+        if let data = try? JSONEncoder().encode(phaseCompletionStatus) {
+            userDefaults.set(data, forKey: "phaseCompletionStatus")
+        }
+    }
+
+    private func checkAndHandleTimeSyncIssues() {
+        if let endTime = endTime {
+            let now = Date()
+            if now > endTime && remainingTime > 0 {
+                logger.warning("检测到时间不同步问题。当前时间: \(now), 预期结束时间: \(endTime), 剩余时间: \(self.remainingTime)")
+                handlePhaseCompletion()
+            }
+        }
+    }
+}
+
+// 在 TimerModel 类中添加
+extension Notification.Name {
+    static let timerCompleted = Notification.Name("timerCompleted")
+    static let phaseChanged = Notification.Name("phaseChanged")
+}
+
+// 保持 TimerState 结构体的定义，用于 Widget 和 UserDefaults
+struct TimerState: Codable {
+    var currentPhaseIndex: Int
+    var remainingTime: Int
+    var timerRunning: Bool
+    var totalTime: Int
+    var phaseCompletionStatus: [PhaseStatus]
+    var currentPhaseName: String
+    var completedCycles: Int
+
+    init(currentPhaseIndex: Int = 0,
+         remainingTime: Int = 1500,
+         timerRunning: Bool = false,
+         totalTime: Int = 1500,
+         phaseCompletionStatus: [PhaseStatus] = [.current, .notStarted, .notStarted, .notStarted],
+         currentPhaseName: String = "Work",
+         completedCycles: Int = 0) {
+        self.currentPhaseIndex = currentPhaseIndex
+        self.remainingTime = remainingTime
+        self.timerRunning = timerRunning
+        self.totalTime = totalTime
+        self.phaseCompletionStatus = phaseCompletionStatus
+        self.currentPhaseName = currentPhaseName
+        self.completedCycles = completedCycles
+    }
+}
+
+// 添加 NotificationEvent 枚举
+enum NotificationEvent {
+    case phaseCompleted
+    // 可以根据需要添加其他事件
+}
+
+// 修改 TimerModelContainer
+@MainActor
+struct TimerModelContainer {
+    static let shared = TimerModelContainer()
+    let timerModel: TimerModel
+    let notificationDelegate: NotificationDelegate
+
+    private init() {
+        let model = TimerModel()
+        self.timerModel = model
+        self.notificationDelegate = NotificationDelegate(timerModel: model)
+        model.setNotificationDelegate(self.notificationDelegate)
+    }
+}
+
+// 将 WKExtendedRuntimeSessionDelegate 方法移到扩展中
+extension TimerModel: WKExtendedRuntimeSessionDelegate {
+    nonisolated func extendedRuntimeSessionDidStart(_ extendedRuntimeSession: WKExtendedRuntimeSession) {
+        logger.info("扩展运行时会话已成功启动。")
+        Task { @MainActor in
+            self.syncWithSystemTime()
+            self.scheduleBackgroundRefresh()
+        }
+    }
+
+    nonisolated func extendedRuntimeSessionWillExpire(_ extendedRuntimeSession: WKExtendedRuntimeSession) {
+        logger.warning("扩展运行时会话即将过期，尝试重新启动会话。")
+        extendedRuntimeSession.invalidate()
+        Task { @MainActor in
+            await self.startExtendedSession()
+        }
+    }
+
+    nonisolated func extendedRuntimeSession(_ extendedRuntimeSession: WKExtendedRuntimeSession, didInvalidateWith reason: WKExtendedRuntimeSessionInvalidationReason, error: Error?) {
+        if let error = error {
+            logger.error("扩展运行时会话失效，原因: \(reason.rawValue)，错误: \(error.localizedDescription)")
+        } else {
+            logger.info("扩展运行时会话失效，原因: \(reason.rawValue)。")
+        }
+
+        // 根据失效原因采取相应措施
+        switch reason {
+        case .expired:
+            logger.info("会话因过期而失效，尝试重新启动。")
+            Task { @MainActor in
+                if self.timerRunning {
+                    await self.startExtendedSession()
+                }
+            }
+        case .none:
+            logger.info("会话正常结束。")
+        case .sessionInProgress:
+            logger.warning("新会话已开始，旧会话被终止。")
+        case .resignedFrontmost:
+            logger.info("应用进入后台，会话结束。")
+        case .suppressedBySystem:
+            logger.warning("会话被系统强制终止，可能需要检查资源使用情况。")
+        case .error:
+            logger.error("会话因错误而终止。")
+            if let error = error {
+                logger.error("错误详情: \(error.localizedDescription)")
+            }
+        @unknown default:
+            logger.error("未知原因导致会话失效。")
+        }
+
+        // 无论因何种原因失效，都尝试保存当前状态
+        Task { @MainActor in
+            self.saveState()
+        }
     }
 }

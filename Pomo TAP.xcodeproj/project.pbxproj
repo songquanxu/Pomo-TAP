@@ -32,16 +32,41 @@
 			name = "Embed Watch Content";
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		F17E3E5E2CA3AF4500F974C3 /* Embed Foundation Extensions */ = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXCopyFilesBuildPhase section */
 
 /* Begin PBXFileReference section */
 		F161DBFD2C9FF6740048B851 /* Pomo TAP.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Pomo TAP.app"; sourceTree = BUILT_PRODUCTS_DIR; };
 		F161DC032C9FF6750048B851 /* Pomo TAP Watch App.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = "Pomo TAP Watch App.app"; sourceTree = BUILT_PRODUCTS_DIR; };
+		F17E3E4B2CA3AF4300F974C3 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		F17E3E4D2CA3AF4300F974C3 /* SwiftUI.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = SwiftUI.framework; path = System/Library/Frameworks/SwiftUI.framework; sourceTree = SDKROOT; };
 /* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedBuildFileExceptionSet section */
+		F1C6510B2CA3C8DD00399991 /* Exceptions for "Pomo TAP Watch App" folder in "Pomo TAP Watch App" target */ = {
+			isa = PBXFileSystemSynchronizedBuildFileExceptionSet;
+			membershipExceptions = (
+				Info.plist,
+			);
+			target = F161DC022C9FF6750048B851 /* Pomo TAP Watch App */;
+		};
+/* End PBXFileSystemSynchronizedBuildFileExceptionSet section */
 
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		F161DC072C9FF6750048B851 /* Pomo TAP Watch App */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
+			exceptions = (
+				F1C6510B2CA3C8DD00399991 /* Exceptions for "Pomo TAP Watch App" folder in "Pomo TAP Watch App" target */,
+			);
 			path = "Pomo TAP Watch App";
 			sourceTree = "<group>";
 		};
@@ -62,6 +87,7 @@
 			isa = PBXGroup;
 			children = (
 				F161DC072C9FF6750048B851 /* Pomo TAP Watch App */,
+				F17E3E4A2CA3AF4300F974C3 /* Frameworks */,
 				F161DBFE2C9FF6740048B851 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -73,6 +99,15 @@
 				F161DC032C9FF6750048B851 /* Pomo TAP Watch App.app */,
 			);
 			name = Products;
+			sourceTree = "<group>";
+		};
+		F17E3E4A2CA3AF4300F974C3 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+				F17E3E4B2CA3AF4300F974C3 /* WidgetKit.framework */,
+				F17E3E4D2CA3AF4300F974C3 /* SwiftUI.framework */,
+			);
+			name = Frameworks;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -104,6 +139,7 @@
 				F161DBFF2C9FF6750048B851 /* Sources */,
 				F161DC002C9FF6750048B851 /* Frameworks */,
 				F161DC012C9FF6750048B851 /* Resources */,
+				F17E3E5E2CA3AF4500F974C3 /* Embed Foundation Extensions */,
 			);
 			buildRules = (
 			);
@@ -138,11 +174,12 @@
 				};
 			};
 			buildConfigurationList = F161DBFA2C9FF6740048B851 /* Build configuration list for PBXProject "Pomo TAP" */;
-			developmentRegion = en;
+			developmentRegion = "zh-Hans";
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
 				Base,
+				"zh-Hans",
 			);
 			mainGroup = F161DBF62C9FF6740048B851;
 			minimizedProjectReferenceProxies = 1;
@@ -318,7 +355,8 @@
 				DEVELOPMENT_TEAM = SUJ4QYM277;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Pomo TAP";
+				INFOPLIST_FILE = "Pomo-TAP-Watch-App-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "捏捏番茄";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKWatchOnly = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -348,7 +386,8 @@
 				DEVELOPMENT_TEAM = SUJ4QYM277;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
-				INFOPLIST_KEY_CFBundleDisplayName = "Pomo TAP";
+				INFOPLIST_FILE = "Pomo-TAP-Watch-App-Info.plist";
+				INFOPLIST_KEY_CFBundleDisplayName = "捏捏番茄";
 				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown";
 				INFOPLIST_KEY_WKWatchOnly = YES;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -374,7 +413,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = SUJ4QYM277;
-				INFOPLIST_KEY_CFBundleDisplayName = "Pomo TAP";
+				INFOPLIST_KEY_CFBundleDisplayName = "捏捏番茄";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "songquan.Pomo-TAP";
 				PRODUCT_NAME = "$(TARGET_NAME)";
@@ -389,7 +428,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_TEAM = SUJ4QYM277;
-				INFOPLIST_KEY_CFBundleDisplayName = "Pomo TAP";
+				INFOPLIST_KEY_CFBundleDisplayName = "捏捏番茄";
 				MARKETING_VERSION = 1.0;
 				PRODUCT_BUNDLE_IDENTIFIER = "songquan.Pomo-TAP";
 				PRODUCT_NAME = "$(TARGET_NAME)";
