@@ -55,17 +55,60 @@ class TimerModel: NSObject, ObservableObject {
     var lastCycleCompletionTime: TimeInterval = 0 // 上次周期完成时间
 
     private let userDefaults: UserDefaults
-    private let logger = Logger(subsystem: "com.yourcompany.pomoTAP", category: "TimerModel")
+    private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "TimerModel")
     private let persistentContainer: NSPersistentContainer
     private var timer: DispatchSourceTimer?
     private var startTime: Date?
     private var pausedRemainingTime: Int?
     private var decisionTimer: Timer?
     private var cooldownTimer: Timer?
-    private var extendedSession: WKExtendedRuntimeSession?
+    private var extendedSession: WKExtendedRuntimeSession? {
+        willSet {
+            if let oldSession = extendedSession, oldSession !== newValue {
+                if oldSession.state == .running {
+                    oldSession.invalidate()
+                    logger.info("清理旧会话: \(oldSession)")
+                }
+            }
+        }
+    }
     var notificationDelegate: NotificationDelegate?
     private var endTime: Date?
     private let launchedBeforeKey = "launchedBefore"
+
+    // 添加新的常量
+    private let PAUSE_RESET_THRESHOLD: TimeInterval = 1800  // 30分钟
+    private let CYCLE_RESET_THRESHOLD: TimeInterval = 28800 // 8小时
+    private let LAST_PAUSE_TIME_KEY = "lastPauseTime"
+    private let LAST_ACTIVE_TIME_KEY = "lastActiveTime"
+
+    // 会话状态枚举
+    private enum SessionState {
+        case none        // 无会话
+        case starting    // 会话启动中
+        case running     // 会话运行中
+        case stopping    // 会话停止中
+        case invalid     // 会话无效
+        
+        var description: String {
+            switch self {
+            case .none: return "无会话"
+            case .starting: return "启动中"
+            case .running: return "运行中"
+            case .stopping: return "停止中"
+            case .invalid: return "无效"
+            }
+        }
+    }
+
+    // 会话状态属性
+    @Published private var sessionState: SessionState = .none {
+        didSet {
+            if oldValue != self.sessionState {
+                self.logger.debug("会话状态变更: \(oldValue.description) -> \(self.sessionState.description)")
+            }
+        }
+    }
 
     // 初始化方法，设置初始阶段和状态
     override init() {
@@ -112,18 +155,32 @@ class TimerModel: NSObject, ObservableObject {
 
     // 保存状态
     func saveState() {
-        userDefaults.set(currentPhaseIndex, forKey: "currentPhase")
-        userDefaults.set(remainingTime, forKey: "remainingTime")
-        userDefaults.set(timerRunning, forKey: "timerRunning")
-        userDefaults.set(completedCycles, forKey: "completedCycles")
-        userDefaults.set(hasSkippedInCurrentCycle, forKey: "hasSkippedInCurrentCycle")
-        userDefaults.set(currentCycleCompleted, forKey: "currentCycleCompleted")
-        userDefaults.set(lastUsageTime, forKey: "lastUsageTime")
-        userDefaults.set(lastCycleCompletionTime, forKey: "lastCycleCompletionTime")
-        userDefaults.set(totalTime, forKey: "totalTime")
-        userDefaults.set(currentPhaseName, forKey: "currentPhaseName")
-        userDefaults.set(Date(), forKey: "lastUpdateTime")
-        savePhaseCompletionStatus()
+        let state = TimerState(
+            currentPhaseIndex: currentPhaseIndex,
+            remainingTime: remainingTime,
+            timerRunning: timerRunning,
+            totalTime: totalTime,
+            phaseCompletionStatus: phaseCompletionStatus,
+            currentPhaseName: currentPhaseName,
+            completedCycles: completedCycles
+        )
+        
+        // 使用 do-catch 处理编码错误
+        do {
+            let encoder = JSONEncoder()
+            let data = try encoder.encode(state)
+            userDefaults.set(data, forKey: "timerState")
+            userDefaults.synchronize()
+            logger.info("状态保存成功")
+        } catch {
+            logger.error("状态保存失败: \(error.localizedDescription)")
+        }
+        
+        // 记录暂停和活动时间
+        if !timerRunning {
+            userDefaults.set(Date().timeIntervalSince1970, forKey: LAST_PAUSE_TIME_KEY)
+        }
+        userDefaults.set(Date().timeIntervalSince1970, forKey: LAST_ACTIVE_TIME_KEY)
     }
 
     // 重置阶段完成状态
@@ -318,8 +375,13 @@ class TimerModel: NSObject, ObservableObject {
     // 切换计时器状态
     func toggleTimer() async {
         if timerRunning {
+            // 先停止计时器
             playSound(.stop)
             stopTimer()
+            
+            // 等待一小段时间再停止会话
+            try? await Task.sleep(nanoseconds: 200_000_000) // 0.2秒
+            stopExtendedSession()
         } else {
             playSound(.start)
             await startTimer()
@@ -408,16 +470,21 @@ class TimerModel: NSObject, ObservableObject {
     private func handlePhaseCompletion() {
         stopTimer()
         
-        if WKExtension.shared().applicationState == .active {
-            playSound(.success)
-            sendHapticFeedback()
-        Task {
-                await moveToNextPhase(autoStart: false, skip: false)
-            } 
-        } else {    
-            notificationDelegate?.sendNotification(for: .phaseCompleted, currentPhaseDuration: phases[currentPhaseIndex].duration / 60, nextPhaseDuration: phases[(currentPhaseIndex + 1) % phases.count].duration / 60)
+        playSound(.success)
+        sendHapticFeedback()
+        
+        Task { @MainActor in
+            notificationDelegate?.sendNotification(
+                for: .phaseCompleted,
+                currentPhaseDuration: phases[currentPhaseIndex].duration / 60,
+                nextPhaseDuration: phases[(currentPhaseIndex + 1) % phases.count].duration / 60
+            )
         }
-
+        
+        Task {
+            await moveToNextPhase(autoStart: false, skip: false)
+        }
+        saveState()
     }
 
     // 更新番茄环位置
@@ -433,28 +500,45 @@ class TimerModel: NSObject, ObservableObject {
 
     // 重置周期
     func resetCycle() {
+        // 先停止所有计时器
         cooldownTimer?.invalidate()
         decisionTimer?.invalidate()
-        
-        currentPhaseIndex = 0
-        remainingTime = phases[currentPhaseIndex].duration
-        totalTime = phases[currentPhaseIndex].duration
-        cyclePhaseCount = 0
-        hasSkippedInCurrentCycle = false
         stopTimer()
-        timerRunning = false
-        isResetState = false
-        isInDecisionMode = false
-        isInCooldownMode = false
-        resetPhaseCompletionStatus()
-        currentCycleCompleted = false
-        tomatoRingPosition = .zero
-        currentPhaseName = phases[currentPhaseIndex].name
-        updateTomatoRingPosition()
-        WKInterfaceDevice.current().play(.retry)
-        saveState()
-        updateResetMode()
-        pausedRemainingTime = nil
+        
+        // 确保扩展会话正确停止
+        Task { @MainActor in
+            // 先停止扩展会话
+            stopExtendedSession()
+            
+            // 等待会话完全停止
+            try? await Task.sleep(nanoseconds: 200_000_000) // 0.2秒
+            
+            // 重置所有状态
+            self.currentPhaseIndex = 0
+            self.remainingTime = self.phases[0].duration
+            self.totalTime = self.phases[0].duration
+            self.cyclePhaseCount = 0
+            self.hasSkippedInCurrentCycle = false
+            self.timerRunning = false
+            self.isResetState = false
+            self.isInDecisionMode = false
+            self.isInCooldownMode = false
+            self.resetPhaseCompletionStatus()
+            self.currentCycleCompleted = false
+            self.tomatoRingPosition = .zero
+            self.currentPhaseName = self.phases[0].name
+            self.updateTomatoRingPosition()
+            
+            // 播放重置音效
+            WKInterfaceDevice.current().play(.retry)
+            
+            // 保存状态
+            self.saveState()
+            self.updateResetMode()
+            self.pausedRemainingTime = nil
+            
+            self.logger.info("计时器已完全重置")
+        }
     }
    
     // 检查并更新完成的周期
@@ -491,39 +575,100 @@ class TimerModel: NSObject, ObservableObject {
 
     // 启动扩展会话
     func startExtendedSession() async {
-        if extendedSession == nil {
-            extendedSession = WKExtendedRuntimeSession()
-            extendedSession?.delegate = self
-            extendedSession?.start()
-            logger.info("尝试启动扩展运行时会话")
+        guard timerRunning else {
+            logger.debug("计时器未运行，不启动扩展会话")
+            return
         }
+        
+        if let currentSession = extendedSession {
+            switch currentSession.state {
+            case .running:
+                logger.debug("会话已在运行中")
+                return
+            case .invalid:
+                extendedSession = nil
+            case .notStarted:
+                currentSession.invalidate()
+                extendedSession = nil
+            default:
+                logger.warning("未知的会话状态: \(currentSession.state.rawValue)")
+                currentSession.invalidate()
+                extendedSession = nil
+            }
+        }
+        
+        sessionState = .starting
+        let session = WKExtendedRuntimeSession()
+        session.delegate = self
+        extendedSession = session
+        
+        session.start()
+        logger.info("正在启动新的扩展会话: \(session)")
     }
 
     // 停止扩展会话
     func stopExtendedSession() {
-        extendedSession?.invalidate()
-        extendedSession = nil
-        logger.info("扩展运行时会话已停止")
+        guard let session = extendedSession else { return }
+        
+        switch session.state {
+        case .running:
+            sessionState = .stopping
+            Task { @MainActor in
+                try? await Task.sleep(nanoseconds: 100_000_000)
+                
+                if session.state == .running {
+                    session.invalidate()
+                    logger.info("正常停止运行中的会话: \(session)")
+                } else {
+                    logger.debug("会话已不在运行状态，跳过停止操作")
+                }
+                
+                self.extendedSession = nil
+                self.sessionState = .none
+            }
+            
+        case .invalid:
+            logger.debug("会话已失效，直接清理")
+            extendedSession = nil
+            sessionState = .none
+            
+        case .notStarted:
+            logger.debug("会话未启动，直接清理")
+            extendedSession = nil
+            sessionState = .none
+            
+        default:
+            logger.warning("未知的会话状态: \(session.state.rawValue)")
+            session.invalidate()
+            extendedSession = nil
+            sessionState = .none
+        }
     }
 
     // 应用变为活动状态
     func appBecameActive() async {
         isAppActive = true
+        
+        // 检查并重置进度（在同步时间之前）
+        checkAndResetProgress()
+        
+        // 原有的同步逻辑
+        synchronizeTimerState()
+        
+        // 检查并更新UI状态
+        updatePhaseCompletionStatus()
+        
+        // 确保计时器状态正确
         if timerRunning {
-            syncWithSystemTime()
-            checkAndHandleTimeSyncIssues()
-            if remainingTime > 0 {
-                await startTimer()
-            } else {
-                handlePhaseCompletion()
-            }
-        } else {
-            // 检查是否需要移动到下一个阶段
-            if remainingTime <= 0 {
-                await moveToNextPhase(autoStart: false, skip: false)
-            }
+            await startTimer()
         }
-    }
+        
+        // 通知UI更新
+        NotificationCenter.default.post(
+            name: .timerStateUpdated,
+            object: self
+        )
+    }   
 
     // 应用变为非活动状态
     func appBecameInactive() {
@@ -533,7 +678,23 @@ class TimerModel: NSObject, ObservableObject {
 
     // 应用进入后台
     func appEnteredBackground() {
+        guard timerRunning else {
+            logger.debug("计时器未运行，无需处理后台任务")
+            return
+        }
+        
+        // 保存当前状态
+        saveState()
+        
+        // 安排后台刷新
         scheduleBackgroundRefresh()
+        
+        // 确保扩展会话在后台运行
+        Task {
+            await startExtendedSession()
+        }
+        
+        logger.info("应用已进入后台模式，已完成必要设置")
     }
 
     // 安排后台刷新
@@ -619,12 +780,140 @@ class TimerModel: NSObject, ObservableObject {
             }
         }
     }
+
+    // 更新阶段完成状态并同步到UI显示
+    func updatePhaseCompletionStatus() {
+        // 初始化状态数组
+        if self.phaseCompletionStatus.count != self.phases.count {
+            self.phaseCompletionStatus = Array(repeating: .notStarted, count: self.phases.count)
+        }
+        
+        // 更新各阶段状态
+        for index in 0..<self.phases.count {
+            if index < self.currentPhaseIndex {
+                // 保持已跳过的状态,其他标记为已完成
+                if self.phaseCompletionStatus[index] != .skipped {
+                    self.phaseCompletionStatus[index] = .normalCompleted
+                }
+            } else if index == self.currentPhaseIndex {
+                // 当前阶段标记为进行中
+                self.phaseCompletionStatus[index] = .current
+            } else {
+                // 后续阶段标记为未开始
+                self.phaseCompletionStatus[index] = .notStarted
+            }
+        }
+        
+        // 持久化保存状态
+        self.savePhaseCompletionStatus()
+        
+        // 发送通知以更新UI
+        NotificationCenter.default.post(
+            name: .phaseChanged, 
+            object: self, 
+            userInfo: ["phaseStatus": self.phaseCompletionStatus]
+        )
+        
+        self.logger.debug("阶段状态已更新并同步到UI: \(self.phaseCompletionStatus)")
+    }
+
+    // 添加状态同步方法
+    private func synchronizeTimerState() {
+        // 确保计时器状态与实际时间同步
+        if timerRunning {
+            guard let endTime = endTime else {
+                stopTimer()
+                return
+            }
+            
+            let now = Date()
+            if now >= endTime {
+                handlePhaseCompletion()
+            } else {
+                remainingTime = Int(endTime.timeIntervalSince(now))
+                updateTomatoRingPosition()
+            }
+        }
+    }
+
+    // 添加错误恢复机制
+    private func recoverFromError() {
+        // 停止所有计时器
+        stopTimer()
+        cooldownTimer?.invalidate()
+        decisionTimer?.invalidate()
+        
+        // 重置会话
+        stopExtendedSession()
+        
+        // 恢复到上一个有效状态
+        loadState()
+        
+        // 通知UI更新
+        NotificationCenter.default.post(
+            name: .timerStateUpdated,
+            object: self
+        )
+    }
+
+    // 添加检查和重置方法
+    private func checkAndResetProgress() {
+        let currentTime = Date().timeIntervalSince1970
+        
+        // 检查暂停时间
+        if !timerRunning {
+            if let lastPauseTime = userDefaults.double(forKey: LAST_PAUSE_TIME_KEY) as TimeInterval?,
+               lastPauseTime > 0 {
+                let pauseDuration = currentTime - lastPauseTime
+                
+                if pauseDuration >= PAUSE_RESET_THRESHOLD {
+                    // 重置当前阶段
+                    remainingTime = phases[currentPhaseIndex].duration
+                    totalTime = phases[currentPhaseIndex].duration
+                    updateTomatoRingPosition()
+                    logger.info("由于暂停时间过长（\(Int(pauseDuration/60))分钟），已重置当前阶段")
+                }
+            }
+        }
+        
+        // 检查周期停止时间
+        if let lastActiveTime = userDefaults.double(forKey: LAST_ACTIVE_TIME_KEY) as TimeInterval?,
+           lastActiveTime > 0 {
+            let inactiveDuration = currentTime - lastActiveTime
+            
+            if inactiveDuration >= CYCLE_RESET_THRESHOLD {
+                // 重置整个周期
+                resetCycleQuietly()
+                logger.info("由于停止时间过长（\(Int(inactiveDuration/3600))小时），已重置当前周期")
+            }
+        }
+    }
+
+    // 添加静默重置方法
+    private func resetCycleQuietly() {
+        currentPhaseIndex = 0
+        remainingTime = phases[0].duration
+        totalTime = phases[0].duration
+        cyclePhaseCount = 0
+        hasSkippedInCurrentCycle = false
+        timerRunning = false
+        isResetState = false
+        isInDecisionMode = false
+        isInCooldownMode = false
+        resetPhaseCompletionStatus()
+        currentCycleCompleted = false
+        tomatoRingPosition = .zero
+        currentPhaseName = phases[0].name
+        updateTomatoRingPosition()
+        saveState()
+    }
 }
 
 // 在 TimerModel 类中添加
 extension Notification.Name {
     static let timerCompleted = Notification.Name("timerCompleted")
     static let phaseChanged = Notification.Name("phaseChanged")
+    static let timerStateUpdated = Notification.Name("timerStateUpdated")
 }
 
 // 保持 TimerState 结构体的定义，用于 Widget 和 UserDefaults
@@ -678,57 +967,73 @@ struct TimerModelContainer {
 // 将 WKExtendedRuntimeSessionDelegate 方法移到扩展中
 extension TimerModel: WKExtendedRuntimeSessionDelegate {
     nonisolated func extendedRuntimeSessionDidStart(_ extendedRuntimeSession: WKExtendedRuntimeSession) {
-        logger.info("扩展运行时会话已成功启动。")
         Task { @MainActor in
-            self.syncWithSystemTime()
+            guard extendedSession === extendedRuntimeSession else {
+                logger.warning("收到过期会话的启动通知")
+                return
+            }
+            
+            sessionState = .running
+            logger.info("会话成功启动: \(extendedRuntimeSession)")
+            
+            // 确保会话启动后立即安排后台刷新
             self.scheduleBackgroundRefresh()
+            
+            // 同步系统时间
+            self.syncWithSystemTime()
         }
     }
-
+    
     nonisolated func extendedRuntimeSessionWillExpire(_ extendedRuntimeSession: WKExtendedRuntimeSession) {
-        logger.warning("扩展运行时会话即将过期，尝试重新启动会话。")
-        extendedRuntimeSession.invalidate()
         Task { @MainActor in
-            await self.startExtendedSession()
+            guard extendedSession === extendedRuntimeSession else { return }
+            
+            logger.warning("会话即将过期: \(extendedRuntimeSession)")
+            
+            // 保存状态
+            self.saveState()
+            
+            if self.timerRunning {
+                // 在当前会话过期前启动新会话
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                await self.startExtendedSession()
+            }
         }
     }
-
+    
     nonisolated func extendedRuntimeSession(_ extendedRuntimeSession: WKExtendedRuntimeSession, didInvalidateWith reason: WKExtendedRuntimeSessionInvalidationReason, error: Error?) {
-        if let error = error {
-            logger.error("扩展运行时会话失效，原因: \(reason.rawValue)，错误: \(error.localizedDescription)")
-        } else {
-            logger.info("扩展运行时会话失效，原因: \(reason.rawValue)。")
-        }
-
-        // 根据失效原因采取相应措施
-        switch reason {
-        case .expired:
-            logger.info("会话因过期而失效，尝试重新启动。")
-            Task { @MainActor in
+        Task { @MainActor in
+            guard extendedSession === extendedRuntimeSession else { return }
+            
+            let errorDescription = error?.localizedDescription ?? "无错误信息"
+            logger.info("会话已失效: \(reason.rawValue), 错误: \(errorDescription)")
+            
+            // 更新状态
+            sessionState = .invalid
+            
+            // 处理特定原因
+            switch reason {
+            case .resignedFrontmost:
                 if self.timerRunning {
+                    try? await Task.sleep(nanoseconds: 300_000_000)
                     await self.startExtendedSession()
                 }
+                
+            case .suppressedBySystem, .error, .expired:
+                if self.timerRunning {
+                    try? await Task.sleep(nanoseconds: 500_000_000)
+                    await self.startExtendedSession()
+                }
+                
+            case .none, .sessionInProgress:
+                break
+                
+            @unknown default:
+                logger.error("未知的会话终止原因: \(reason.rawValue)")
             }
-        case .none:
-            logger.info("会话正常结束。")
-        case .sessionInProgress:
-            logger.warning("新会话已开始，旧会话被终止。")
-        case .resignedFrontmost:
-            logger.info("应用进入后台，会话结束。")
-        case .suppressedBySystem:
-            logger.warning("会话被系统强制终止，可能需要检查资源使用情况。")
-        case .error:
-            logger.error("会话因错误而终止。")
-            if let error = error {
-                logger.error("错误详情: \(error.localizedDescription)")
-            }
-        @unknown default:
-            logger.error("未知原因导致会话失效。")
-        }
-
-        // 无论因何种原因失效，都尝试保存当前状态
-        Task { @MainActor in
-            self.saveState()
+            
+            // 清理状态
+            self.extendedSession = nil
         }
     }
 }
