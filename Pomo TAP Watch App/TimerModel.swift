@@ -27,7 +27,7 @@ class TimerModel: NSObject, ObservableObject {
     @Published var completedCycles: Int // 完成的周期数
     @Published var isAppActive = true // 应用是否处于活动状态
     @Published var lastBackgroundDate: Date? // 上次进入后台的时间
-    @Published var hasSkippedInCurrentCycle = false // 当前周期是否跳过
+    @Published var hasSkippedInCurrentCycle = false // 当前期是否跳过
     @Published var isResetState = false // 是否处于重置状态
     @Published var isInDecisionMode = false // 是否处于决策模式
     @Published var isInCooldownMode = false // 是否处于冷却模式
@@ -65,9 +65,20 @@ class TimerModel: NSObject, ObservableObject {
     private var extendedSession: WKExtendedRuntimeSession? {
         willSet {
             if let oldSession = extendedSession, oldSession !== newValue {
-                if oldSession.state == .running {
-                    oldSession.invalidate()
-                    logger.info("清理旧会话: \(oldSession)")
+                // 确保在状态改变前记录当前状态
+                let currentState = oldSession.state
+                
+                if currentState == .running {
+                    sessionState = .stopping
+                    // 使用串行队列确保操作顺序
+                    DispatchQueue.main.async { [weak self] in
+                        guard let self = self else { return }
+                        // 再次检查状态，确保会话仍然有效
+                        if oldSession === self.extendedSession {
+                            oldSession.invalidate()
+                            self.logger.info("清理旧会话: \(oldSession)")
+                        }
+                    }
                 }
             }
         }
@@ -106,6 +117,15 @@ class TimerModel: NSObject, ObservableObject {
         didSet {
             if oldValue != self.sessionState {
                 self.logger.debug("会话状态变更: \(oldValue.description) -> \(self.sessionState.description)")
+            }
+        }
+    }
+
+    // 会话引用计数
+    @Published private var sessionRetainCount: Int = 0 {
+        didSet {
+            if oldValue != self.sessionRetainCount {
+                self.logger.debug("会话引用计数变更: \(oldValue) -> \(self.sessionRetainCount)")
             }
         }
     }
@@ -580,29 +600,33 @@ class TimerModel: NSObject, ObservableObject {
             return
         }
         
+        // 增加引用计数
+        sessionRetainCount += 1
+        
         if let currentSession = extendedSession {
             switch currentSession.state {
             case .running:
                 logger.debug("会话已在运行中")
                 return
             case .invalid:
-                extendedSession = nil
+                await cleanupSession()
             case .notStarted:
-                currentSession.invalidate()
-                extendedSession = nil
+                await cleanupSession()
             default:
-                logger.warning("未知的会话状态: \(currentSession.state.rawValue)")
-                currentSession.invalidate()
-                extendedSession = nil
+                await cleanupSession()
             }
         }
         
         sessionState = .starting
         let session = WKExtendedRuntimeSession()
         session.delegate = self
-        extendedSession = session
         
-        session.start()
+        // 使用 async 确保状态更新在主队列执行
+        await MainActor.run {
+            extendedSession = session
+            session.start()
+        }
+        
         logger.info("正在启动新的扩展会话: \(session)")
     }
 
@@ -610,21 +634,41 @@ class TimerModel: NSObject, ObservableObject {
     func stopExtendedSession() {
         guard let session = extendedSession else { return }
         
-        switch session.state {
+        // 增加引用计数检查
+        if sessionRetainCount > 0 {
+            sessionRetainCount -= 1
+            if sessionRetainCount > 0 {
+                logger.debug("会话仍被其他地方使用，延迟停止")
+                return
+            }
+        }
+        
+        // 使用临时变量保存当前会话
+        let currentSession = session
+        
+        switch currentSession.state {
         case .running:
             sessionState = .stopping
-            Task { @MainActor in
-                try? await Task.sleep(nanoseconds: 100_000_000)
+            
+            // 使用串行队列确保操作顺序
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
                 
-                if session.state == .running {
-                    session.invalidate()
-                    logger.info("正常停止运行中的会话: \(session)")
+                // 再次检查状态和会话标识
+                if currentSession === self.extendedSession && currentSession.state == .running {
+                    // 先清除引用，再停止会话
+                    self.extendedSession = nil
+                    self.sessionState = .none
+                    
+                    // 最后执行无效化
+                    currentSession.invalidate()
+                    self.logger.info("正常停止运行中的会话: \(currentSession)")
                 } else {
-                    logger.debug("会话已不在运行状态，跳过停止操作")
+                    self.logger.debug("会话状态已改变，跳过停止操作")
+                    // 确保状态一致性
+                    self.extendedSession = nil
+                    self.sessionState = .none
                 }
-                
-                self.extendedSession = nil
-                self.sessionState = .none
             }
             
         case .invalid:
@@ -638,10 +682,13 @@ class TimerModel: NSObject, ObservableObject {
             sessionState = .none
             
         default:
-            logger.warning("未知的会话状态: \(session.state.rawValue)")
-            session.invalidate()
-            extendedSession = nil
-            sessionState = .none
+            logger.warning("未知的会话状态: \(currentSession.state.rawValue)")
+            DispatchQueue.main.async { [weak self] in
+                guard let self = self else { return }
+                self.extendedSession = nil
+                self.sessionState = .none
+                currentSession.invalidate()
+            }
         }
     }
 
@@ -906,6 +953,16 @@ class TimerModel: NSObject, ObservableObject {
         currentPhaseName = phases[0].name
         updateTomatoRingPosition()
         saveState()
+    }
+
+    // 添加清理会话的辅助方法
+    private func cleanupSession() async {
+        if let session = extendedSession {
+            await MainActor.run {
+                session.invalidate()
+                extendedSession = nil
+            }
+        }
     }
 }
 

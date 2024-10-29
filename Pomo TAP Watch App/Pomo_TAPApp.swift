@@ -19,13 +19,8 @@ struct Pomo_TAPApp: App {
     // 添加状态变量来控制权限提示
     @State private var showNotificationPermissionAlert = false
     
-    init() {
-        // 在检查通知权限前确保 NotificationDelegate 已正确初始化
-        Task { @MainActor in
-            try? await Task.sleep(nanoseconds: 500_000_000) // 等待0.5秒确保初始化完成
-            checkNotificationPermission()
-        }
-    }
+    // 添加权限检查管理器
+    private let permissionManager = PermissionManager()
     
     var body: some Scene {
         WindowGroup {
@@ -40,27 +35,19 @@ struct Pomo_TAPApp: App {
                 } message: {
                     Text("为了在番茄钟完成时通知您，我们需要通知权限。请在设置中开启通知。")
                 }
-        }
-    }
-    
-    // 检查通知权限
-    private func checkNotificationPermission() {
-        UNUserNotificationCenter.current().getNotificationSettings { settings in
-            Task { @MainActor in
-                switch settings.authorizationStatus {
-                case .notDetermined:
-                    // 首次使用，请求权限
-                    notificationDelegate.requestNotificationPermission()
-                case .denied:
-                    // 权限被拒绝，显示提示
-                    showNotificationPermissionAlert = true
-                case .authorized, .provisional, .ephemeral:
-                    // 已获得权限，不需要操作
-                    break
-                @unknown default:
-                    break
+                .task {
+                    // 在视图加载后检查权限
+                    await permissionManager.checkNotificationPermission { status in
+                        switch status {
+                        case .notDetermined:
+                            notificationDelegate.requestNotificationPermission()
+                        case .denied:
+                            showNotificationPermissionAlert = true
+                        default:
+                            break
+                        }
+                    }
                 }
-            }
         }
     }
     
@@ -68,6 +55,16 @@ struct Pomo_TAPApp: App {
     private func openSettings() {
         if let settingsUrl = URL(string: "x-apple-watch://") {
             WKExtension.shared().openSystemURL(settingsUrl)
+        }
+    }
+}
+
+// 权限管理器
+private actor PermissionManager {
+    func checkNotificationPermission(completion: @escaping (UNAuthorizationStatus) -> Void) async {
+        let settings = await UNUserNotificationCenter.current().notificationSettings()
+        await MainActor.run {
+            completion(settings.authorizationStatus)
         }
     }
 }

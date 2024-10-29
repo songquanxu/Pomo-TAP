@@ -60,7 +60,7 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
         self.logger.info("当前通知权限状态: \(settings.authorizationStatus.rawValue)")
     }
     
-    // 添加 sendNotification 方法
+    // 修改 sendNotification 方法
     func sendNotification(for event: NotificationEvent, currentPhaseDuration: Int, nextPhaseDuration: Int) {
         Task {
             // 先检查权限状态
@@ -89,15 +89,14 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
             
             // 创建通知触发器（立即触发）
             let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
-
+            
             let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
             
-            UNUserNotificationCenter.current().add(request) { [weak self] error in
-                if let error = error {
-                    self?.logger.error("发送通知时出错: \(error.localizedDescription)")
-                } else {
-                    self?.logger.info("通知发送成功: \(content.body), 时间: \(Date())")
-                }
+            do {
+                try await UNUserNotificationCenter.current().add(request)
+                self.logger.info("通知发送成功: \(content.body), 时间: \(Date())")
+            } catch {
+                self.logger.error("发送通知时出错: \(error.localizedDescription)")
             }
         }
     }
