@@ -4,7 +4,7 @@ import os  // 添加这一行以支持 Logger
 
 class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, ObservableObject {
     @Published var timerModel: TimerModel
-    private let logger = Logger(subsystem: "com.yourcompany.pomoTAP", category: "NotificationDelegate")  // 添加 Logger
+    private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "NotificationDelegate")
     @Published private(set) var notificationPermissionStatus: UNAuthorizationStatus = .notDetermined
     
     init(timerModel: TimerModel) {
@@ -14,90 +14,130 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
     }
     
     // 处理用户对通知的响应
-    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        didReceive response: UNNotificationResponse,
+        withCompletionHandler completionHandler: @escaping () -> Void
+    ) {
         if response.actionIdentifier == "START_NEXT_PHASE" {
-            Task {
-                await timerModel.moveToNextPhase(autoStart: true, skip: false)
+            Task(priority: .userInitiated) { [weak self] in
+                guard let self = self else { return }
+                // 确保当前阶段已经完成
+                if await self.timerModel.remainingTime <= 0 {
+                    await self.timerModel.moveToNextPhase(autoStart: true, skip: false)
+                }
             }
         }
-        // 如果是 "IGNORE" 或者用户没有选择任何操作，我们不需要做任何事
         completionHandler()
     }
     
-    // 在前台展示通知并确保声音和横幅
-    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
-        // 检查应用是否处于前台
+    // 处理前台通知
+    func userNotificationCenter(
+        _ center: UNUserNotificationCenter,
+        willPresent notification: UNNotification,
+        withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
+    ) {
         let state = WKExtension.shared().applicationState
         if state != .active {
-            // 仅在后台时展示通知
             completionHandler([.banner, .sound])
         } else {
-            // 前台不展示通知
             completionHandler([])
         }
     }
     
+    // 请求通知权限
     @MainActor
     func requestNotificationPermission() {
         Task {
             do {
-                let granted = try await UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge])
+                let granted = try await UNUserNotificationCenter.current().requestAuthorization(
+                    options: [.alert, .sound]
+                )
                 if granted {
-                    self.logger.info("通知权限已获得")
+                    logger.info("通知权限已获得")
                 } else {
-                    self.logger.warning("用户拒绝了通知权限")
+                    logger.warning("用户拒绝了通知权限")
                 }
             } catch {
-                self.logger.error("请求通知权限时出错: \(error.localizedDescription)")
+                logger.error("请求通知权限时出错: \(error.localizedDescription)")
             }
         }
     }
     
+    // 检查通知权限状态
     @MainActor
     func checkNotificationPermissionStatus() async {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
         self.notificationPermissionStatus = settings.authorizationStatus
-        self.logger.info("当前通知权限状态: \(settings.authorizationStatus.rawValue)")
+        logger.info("当前通知权限状态: \(settings.authorizationStatus.rawValue)")
     }
     
-    // 修改 sendNotification 方法
+    // 发送通知
     func sendNotification(for event: NotificationEvent, currentPhaseDuration: Int, nextPhaseDuration: Int) {
         Task {
-            // 先检查权限状态
-            let settings = await UNUserNotificationCenter.current().notificationSettings()
-            guard settings.authorizationStatus == .authorized else {
-                self.logger.warning("通知权限未获得，无法发送通知")
-                return
-            }
-            
-            let content = UNMutableNotificationContent()
-            
-            switch event {
-            case .phaseCompleted:
-                content.title = NSLocalizedString("Great_Job", comment: "")
-                content.body = String(format: NSLocalizedString("Notification_Body", comment: ""), nextPhaseDuration)
-                content.sound = .default
-                
-                let nextPhaseAction = UNNotificationAction(identifier: "START_NEXT_PHASE", title: NSLocalizedString("Start_Immediately", comment: ""), options: .foreground)
-                let ignoreAction = UNNotificationAction(identifier: "IGNORE", title: NSLocalizedString("Ignore", comment: ""), options: .destructive)
-                
-                let category = UNNotificationCategory(identifier: "PHASE_COMPLETED", actions: [nextPhaseAction, ignoreAction], intentIdentifiers: [], options: [])
-                
-                UNUserNotificationCenter.current().setNotificationCategories([category])
-                content.categoryIdentifier = "PHASE_COMPLETED"
-            }
-            
-            // 创建通知触发器（立即触发）
-            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 1, repeats: false)
-            
-            let request = UNNotificationRequest(identifier: UUID().uuidString, content: content, trigger: trigger)
-            
             do {
+                // 检查权限
+                let settings = await UNUserNotificationCenter.current().notificationSettings()
+                guard settings.authorizationStatus == .authorized else {
+                    logger.warning("通知权限未获得，无法发送通知")
+                    return
+                }
+                
+                // 创建通知内容
+                let content = UNMutableNotificationContent()
+                content.sound = .default
+                content.interruptionLevel = .timeSensitive
+                content.threadIdentifier = "PomoTAP_Notifications"
+                
+                switch event {
+                case .phaseCompleted:
+                    content.title = NSLocalizedString("Great_Job", comment: "")
+                    content.body = String(format: NSLocalizedString("Notification_Body", comment: ""), nextPhaseDuration)
+                    
+                    // 设置通知动作
+                    let category = try setupNotificationCategory()
+                    content.categoryIdentifier = category.identifier
+                }
+                
+                // 创建通知请求
+                let request = UNNotificationRequest(
+                    identifier: UUID().uuidString,
+                    content: content,
+                    trigger: nil  // 立即触发
+                )
+                
+                // 添加通知请求
                 try await UNUserNotificationCenter.current().add(request)
-                self.logger.info("通知发送成功: \(content.body), 时间: \(Date())")
+                logger.info("通知发送成功: \(content.body)")
             } catch {
-                self.logger.error("发送通知时出错: \(error.localizedDescription)")
+                logger.error("发送通知失败: \(error.localizedDescription)")
             }
         }
+    }
+    
+    // 设置通知类别
+    private func setupNotificationCategory() throws -> UNNotificationCategory {
+        let nextPhaseAction = UNNotificationAction(
+            identifier: "START_NEXT_PHASE",
+            title: NSLocalizedString("Start_Immediately", comment: ""),
+            options: [.foreground, .authenticationRequired]
+        )
+        
+        let ignoreAction = UNNotificationAction(
+            identifier: "IGNORE",
+            title: NSLocalizedString("Ignore", comment: ""),
+            options: .destructive
+        )
+        
+        let category = UNNotificationCategory(
+            identifier: "PHASE_COMPLETED",
+            actions: [nextPhaseAction, ignoreAction],
+            intentIdentifiers: [],
+            options: [.customDismissAction]
+        )
+        
+        // 直接设置类别，不使用 await
+        UNUserNotificationCenter.current().setNotificationCategories([category])
+        return category
     }
 }

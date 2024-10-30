@@ -51,9 +51,17 @@ struct ContentView: View {
                     await timerModel.appBecameActive()
                 }
             case .inactive:
+                // 在变为非活动状态时处理
                 timerModel.appBecameInactive()
             case .background:
-                timerModel.appEnteredBackground()
+                do {
+                    // 等待一小段时间确保状态转换完成
+                    try await Task.sleep(nanoseconds: 100_000_000) // 等待 0.1 秒
+                    timerModel.appEnteredBackground()
+                } catch {
+                    // 如果 sleep 被取消，直接进入后台
+                    timerModel.appEnteredBackground()
+                }
             @unknown default:
                 break
             }

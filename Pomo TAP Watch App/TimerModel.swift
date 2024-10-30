@@ -333,6 +333,9 @@ class TimerModel: NSObject, ObservableObject {
 
     // 移动到下一个阶段
     func moveToNextPhase(autoStart: Bool, skip: Bool = false) async {
+        // 重置通知状态
+        notificationSent = false
+        
         startTransitionAnimation()
         
         let isSkipped = skip
@@ -365,7 +368,7 @@ class TimerModel: NSObject, ObservableObject {
         saveState()
         updateResetMode()
         
-        if isNormalCompletion {
+        if isNormalCompletion && isAppActive {
             sendHapticFeedback()
         }
 
@@ -444,7 +447,7 @@ class TimerModel: NSObject, ObservableObject {
         stopExtendedSession()
         timerRunning = false
 
-        logger.info("计时器已停止。剩余时间: \(self.remainingTime) 秒。")
+        logger.info("计时器已停。剩余时间: \(self.remainingTime) 秒。")
     }
 
     // 更新计时器
@@ -490,21 +493,28 @@ class TimerModel: NSObject, ObservableObject {
     private func handlePhaseCompletion() {
         stopTimer()
         
-        playSound(.success)
-        sendHapticFeedback()
-        
         Task { @MainActor in
-            notificationDelegate?.sendNotification(
-                for: .phaseCompleted,
-                currentPhaseDuration: phases[currentPhaseIndex].duration / 60,
-                nextPhaseDuration: phases[(currentPhaseIndex + 1) % phases.count].duration / 60
-            )
+            // 发送通知（让 NotificationDelegate 处理前台/后台逻辑）
+            if !notificationSent {
+                notificationDelegate?.sendNotification(
+                    for: .phaseCompleted,
+                    currentPhaseDuration: phases[currentPhaseIndex].duration / 60,
+                    nextPhaseDuration: phases[(currentPhaseIndex + 1) % phases.count].duration / 60
+                )
+                notificationSent = true
+            }
+            
+            // 只在前台时播放音效
+            if isAppActive {
+                playSound(.success)
+                sendHapticFeedback()
+                // 在前台时自动进入下一阶段
+                await moveToNextPhase(autoStart: false, skip: false)
+            }
+            // 在后台时不自动进入下一阶段，等待用户通过通知操作
+            
+            saveState()
         }
-        
-        Task {
-            await moveToNextPhase(autoStart: false, skip: false)
-        }
-        saveState()
     }
 
     // 更新番茄环位置
@@ -597,6 +607,12 @@ class TimerModel: NSObject, ObservableObject {
     func startExtendedSession() async {
         guard timerRunning else {
             logger.debug("计时器未运行，不启动扩展会话")
+            return
+        }
+        
+        // 检查应用状态
+        guard WKExtension.shared().applicationState == .active else {
+            logger.warning("应用不在活跃状态，无法启动会话")
             return
         }
         
@@ -730,18 +746,21 @@ class TimerModel: NSObject, ObservableObject {
             return
         }
         
-        // 保存当前状态
-        saveState()
-        
-        // 安排后台刷新
-        scheduleBackgroundRefresh()
-        
-        // 确保扩展会话在后台运行
+        // 在进入后台前启动会话
         Task {
-            await startExtendedSession()
+            // 先保存状态
+            saveState()
+            
+            // 确保在正确的时机启动会话
+            if WKExtension.shared().applicationState == .active {
+                await startExtendedSession()
+            }
+            
+            // 安排后台刷新
+            scheduleBackgroundRefresh()
+            
+            logger.info("应用已进入后台模式，已完成必要设置")
         }
-        
-        logger.info("应用已进入后台模式，已完成必要设置")
     }
 
     // 安排后台刷新

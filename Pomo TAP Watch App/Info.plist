@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
 	<key>CFBundleIdentifier</key>
-	<string>com.yourcompany.pomoTAP</string>
+	<string>songquan.Pomo-TAP.watchkitapp</string>
 	<key>CFBundleName</key>
 	<string>Pomo TAP</string>
 	<key>CFBundleDisplayName</key>
@@ -17,7 +17,7 @@
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSRequiresIPhoneOS</key>
-	<true/>
+	<false/>
 	<key>UILaunchStoryboardName</key>
 	<string>LaunchScreen</string>
 	<key>UIRequiredDeviceCapabilities</key>
@@ -34,39 +34,25 @@
 		<string>UIInterfaceOrientationPortraitUpsideDown</string>
 	</array>
 	<key>WKCompanionAppBundleIdentifier</key>
-	<string>com.yourcompany.pomoTAP</string>
+	<string>songquan.Pomo-TAP</string>
 	<key>WKWatchKitApp</key>
 	<true/>
 	<key>WKAppBundleIdentifier</key>
-	<string>com.songquan.pomoTAP.watchkitapp</string>
+	<string>songquan.Pomo-TAP.watchkitapp</string>
 	<key>NSUserNotificationUsageDescription</key>
-	<string>Notification_Usage_Description</string>
+	<string>请允许通知权限，以便提醒您番茄钟的完成状态。</string>
 	<key>WKBackgroundModes</key>
 	<array>
 		<string>self-care</string>
+		<string>mindfulness</string>
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>
 		<string>audio</string>
+		<string>remote-notification</string>
+		<string>processing</string>
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
-	<key>UIApplicationSceneManifest</key>
-	<dict>
-		<key>UIApplicationSupportsMultipleScenes</key>
-		<false/>
-		<key>UISceneConfigurations</key>
-		<dict>
-			<key>UIWindowSceneSessionRoleApplication</key>
-			<array>
-				<dict>
-					<key>UISceneConfigurationName</key>
-					<string>Default Configuration</string>
-					<key>UISceneDelegateClassName</key>
-					<string>$(PRODUCT_MODULE_NAME).SceneDelegate</string>
-				</dict>
-			</array>
-		</dict>
-	</dict>
 </dict>
 </plist>
