@@ -22,10 +22,8 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
         if response.actionIdentifier == "START_NEXT_PHASE" {
             Task(priority: .userInitiated) { [weak self] in
                 guard let self = self else { return }
-                // 确保当前阶段已经完成
-                if await self.timerModel.remainingTime <= 0 {
-                    await self.timerModel.moveToNextPhase(autoStart: true, skip: false)
-                }
+                // 使用新的公开方法处理通知响应
+                await self.timerModel.handleNotificationResponse()
             }
         }
         completionHandler()
@@ -91,21 +89,24 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                 
                 switch event {
                 case .phaseCompleted:
-                    content.title = NSLocalizedString("Great_Job", comment: "")
+                    // 设置通知标题
+                    content.title = NSLocalizedString("Great_Job", comment: "通知标题：完成一个番茄时显示")
                     
                     // 获取下一阶段的类型描述
-                    let nextPhaseType = await NSLocalizedString(
-                        self.timerModel.phases[(self.timerModel.currentPhaseIndex + 1) % self.timerModel.phases.count].name == "Work" 
-                            ? "Phase_Work" 
-                            : (self.timerModel.phases[(self.timerModel.currentPhaseIndex + 1) % self.timerModel.phases.count].name == "Short Break" 
-                                ? "Phase_Short_Break" 
-                                : "Phase_Long_Break"),
-                        comment: ""
+                    let nextPhaseIndex = (await timerModel.currentPhaseIndex + 1) % (await timerModel.phases.count)
+                    let nextPhaseName = await timerModel.phases[nextPhaseIndex].name
+                    
+                    let nextPhaseType = NSLocalizedString(
+                        getPhaseLocalizationKey(for: nextPhaseName),
+                        comment: "阶段类型：专注/短休息/长休息"
                     )
                     
-                    content.body = String(format: NSLocalizedString("Notification_Body", comment: ""), 
-                                         nextPhaseDuration,
-                                         nextPhaseType)
+                    // 设置通知内容
+                    content.body = String(
+                        format: NSLocalizedString("Notification_Body", comment: "通知内容：%d = 持续时间（分钟），%@ = 阶段类型"),
+                        nextPhaseDuration,
+                        nextPhaseType
+                    )
                     
                     // 设置通知动作
                     let category = try setupNotificationCategory()
@@ -128,28 +129,35 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
         }
     }
     
+    // 添加辅助方法来获取阶段的本地化键
+    private func getPhaseLocalizationKey(for phaseName: String) -> String {
+        switch phaseName {
+        case "Work":
+            return "Phase_Work"
+        case "Short Break":
+            return "Phase_Short_Break"
+        case "Long Break":
+            return "Phase_Long_Break"
+        default:
+            return "Phase_Work" // 默认返回专注阶段
+        }
+    }
+    
     // 设置通知类别
     private func setupNotificationCategory() throws -> UNNotificationCategory {
         let nextPhaseAction = UNNotificationAction(
             identifier: "START_NEXT_PHASE",
-            title: NSLocalizedString("Start_Immediately", comment: ""),
+            title: NSLocalizedString("Start_Immediately", comment: "通知动作：立即开始下一阶段"),
             options: [.foreground, .authenticationRequired]
-        )
-        
-        let ignoreAction = UNNotificationAction(
-            identifier: "IGNORE",
-            title: NSLocalizedString("Ignore", comment: ""),
-            options: .destructive
         )
         
         let category = UNNotificationCategory(
             identifier: "PHASE_COMPLETED",
-            actions: [nextPhaseAction, ignoreAction],
+            actions: [nextPhaseAction],
             intentIdentifiers: [],
             options: [.customDismissAction]
         )
         
-        // 直接设置类别，不使用 await
         UNUserNotificationCenter.current().setNotificationCategories([category])
         return category
     }

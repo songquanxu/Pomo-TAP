@@ -504,12 +504,13 @@ class TimerModel: NSObject, ObservableObject {
                 notificationSent = true
             }
             
-            // 只在前台时播放音效和触觉反馈
+            // 无论前台还是后台，都进入下一阶段
+            await moveToNextPhase(autoStart: false, skip: false)
+            
+            // 只在前台播放音效和触觉反馈
             if isAppActive {
                 playSound(.success)
                 sendHapticFeedback()
-                // 在前台时自动进入下一阶段
-                await moveToNextPhase(autoStart: false, skip: false)
             }
             // 在后台时不自动进入下一阶段，等待用户通过通知操作
             
@@ -984,6 +985,12 @@ class TimerModel: NSObject, ObservableObject {
                 extendedSession = nil
             }
         }
+    }
+
+    // 添加公开方法用于处理通知响应
+    func handleNotificationResponse() async {
+        isAppActive = true
+        await startTimer()
     }
 }
 

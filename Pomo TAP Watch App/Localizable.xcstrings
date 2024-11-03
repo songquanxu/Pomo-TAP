@@ -70,6 +70,7 @@
       }
     },
     "Great_Job" : {
+      "comment" : "通知标题：完成一个番茄时显示",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -103,11 +104,8 @@
         }
       }
     },
-    "Ignore" : {
-
-    },
     "Notification_Body" : {
-      "comment" : "Parameters: %d = duration in minutes, %@ = phase type (Focus/Short Break/Long Break)",
+      "comment" : "通知内容：%d = 持续时间（分钟），%@ = 阶段类型",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -259,7 +257,7 @@
 
     },
     "Start_Immediately" : {
-
+      "comment" : "通知动作：立即开始下一阶段"
     },
     "为了在番茄钟完成时通知您，我们需要通知权限。请在设置中开启通知。" : {
       "localizations" : {
