@@ -92,7 +92,20 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                 switch event {
                 case .phaseCompleted:
                     content.title = NSLocalizedString("Great_Job", comment: "")
-                    content.body = String(format: NSLocalizedString("Notification_Body", comment: ""), nextPhaseDuration)
+                    
+                    // 获取下一阶段的类型描述
+                    let nextPhaseType = await NSLocalizedString(
+                        self.timerModel.phases[(self.timerModel.currentPhaseIndex + 1) % self.timerModel.phases.count].name == "Work" 
+                            ? "Phase_Work" 
+                            : (self.timerModel.phases[(self.timerModel.currentPhaseIndex + 1) % self.timerModel.phases.count].name == "Short Break" 
+                                ? "Phase_Short_Break" 
+                                : "Phase_Long_Break"),
+                        comment: ""
+                    )
+                    
+                    content.body = String(format: NSLocalizedString("Notification_Body", comment: ""), 
+                                         nextPhaseDuration,
+                                         nextPhaseType)
                     
                     // 设置通知动作
                     let category = try setupNotificationCategory()

@@ -54,5 +54,12 @@
 	</array>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>WKApplication</key>
+	<dict>
+		<key>WKAlwaysRunsInBackground</key>
+		<true/>
+		<key>WKSupportsAlwaysOnDisplay</key>
+		<false/>
+	</dict>
 </dict>
 </plist>

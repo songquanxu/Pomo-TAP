@@ -504,7 +504,7 @@ class TimerModel: NSObject, ObservableObject {
                 notificationSent = true
             }
             
-            // 只在前台时播放音效
+            // 只在前台时播放音效和触觉反馈
             if isAppActive {
                 playSound(.success)
                 sendHapticFeedback()
@@ -746,21 +746,20 @@ class TimerModel: NSObject, ObservableObject {
             return
         }
         
-        // 在进入后台前启动会话
-        Task {
-            // 先保存状态
-            saveState()
-            
-            // 确保在正确的时机启动会话
-            if WKExtension.shared().applicationState == .active {
+        // 先保存状态
+        saveState()
+        
+        // 确保在正确的时机启动会话
+        if WKExtension.shared().applicationState == .active {
+            Task {
                 await startExtendedSession()
             }
-            
-            // 安排后台刷新
-            scheduleBackgroundRefresh()
-            
-            logger.info("应用已进入后台模式，已完成必要设置")
         }
+        
+        // 安排后台刷新
+        scheduleBackgroundRefresh()
+        
+        logger.info("应用已进入后台模式，已完成必要设置")
     }
 
     // 安排后台刷新
@@ -900,6 +899,9 @@ class TimerModel: NSObject, ObservableObject {
                 updateTomatoRingPosition()
             }
         }
+        
+        // 检查并更新完成的周期
+        checkAndUpdateCompletedCycles()
     }
 
     // 添加错误恢复机制

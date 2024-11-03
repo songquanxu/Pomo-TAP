@@ -276,7 +276,7 @@ struct ContentView: View {
             } else {
                 let components = formatter.string(from: TimeInterval(time))?.components(separatedBy: ":")
                 if let minutes = components?.first {
-                    return "\(minutes): --"
+                    return "\(minutes):--"  // 只显示分钟数
                 }
             }
         }
