@@ -70,9 +70,9 @@ struct ContentView: View {
     
     private func topDateTimeView(geometry: GeometryProxy) -> some View {
         VStack(alignment: .leading, spacing: 0) {
-            Text(dateString())
+            Text(dateString().prefix(5)) // 只显示月日，如 "12/25"
                 .font(.system(size: geometry.size.width * 0.08))
-            Text(weekdayString())
+            Text(weekdayString().prefix(3)) // 只显示周几的缩写，如 "周一"
                 .font(.system(size: geometry.size.width * 0.06))
                 .foregroundColor(.gray)
         }
