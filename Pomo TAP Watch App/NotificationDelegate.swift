@@ -35,12 +35,8 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        let state = WKExtension.shared().applicationState
-        if state != .active {
-            completionHandler([.banner, .sound])
-        } else {
-            completionHandler([])
-        }
+        // 无论前台还是后台都显示通知
+        completionHandler([.banner, .sound])
     }
     
     // 请求通知权限
@@ -92,12 +88,9 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                     // 设置通知标题
                     content.title = NSLocalizedString("Great_Job", comment: "通知标题：完成一个番茄时显示")
                     
-                    // 获取下一阶段的类型描述
-                    let nextPhaseIndex = (await timerModel.currentPhaseIndex + 1) % (await timerModel.phases.count)
-                    let nextPhaseName = await timerModel.phases[nextPhaseIndex].name
-                    
-                    let nextPhaseType = NSLocalizedString(
-                        getPhaseLocalizationKey(for: nextPhaseName),
+                    // 获取当前阶段的类型描述
+                    let currentPhaseType = NSLocalizedString(
+                        getPhaseLocalizationKey(for: await timerModel.currentPhaseName),
                         comment: "阶段类型：专注/短休息/长休息"
                     )
                     
@@ -105,7 +98,7 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                     content.body = String(
                         format: NSLocalizedString("Notification_Body", comment: "通知内容：%d = 持续时间（分钟），%@ = 阶段类型"),
                         nextPhaseDuration,
-                        nextPhaseType
+                        currentPhaseType
                     )
                     
                     // 设置通知动作

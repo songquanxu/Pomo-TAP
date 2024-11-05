@@ -257,7 +257,39 @@
 
     },
     "Start_Immediately" : {
-      "comment" : "通知动作：立即开始下一阶段"
+      "comment" : "通知动作：立即开始下一阶段",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Start Now"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "今すぐ開始"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "지금 시작"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即开始"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "立即開始"
+          }
+        }
+      }
     },
     "为了在番茄钟完成时通知您，我们需要通知权限。请在设置中开启通知。" : {
       "localizations" : {
