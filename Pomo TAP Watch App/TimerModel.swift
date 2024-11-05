@@ -165,7 +165,7 @@ class TimerModel: NSObject, ObservableObject {
         } else {
             loadState()
         }
-        self.loadPhaseCompletionStatus()
+        self.resetPhaseCompletionStatus()
     }
     
     // 获取当前阶段
@@ -550,7 +550,7 @@ class TimerModel: NSObject, ObservableObject {
             self.totalTime = self.phases[0].duration
             self.cyclePhaseCount = 0
             self.hasSkippedInCurrentCycle = false
-            self.timerRunning = false
+            self.timerRunning = false  // 确保计时器状态正确
             self.isResetState = false
             self.isInDecisionMode = false
             self.isInCooldownMode = false
@@ -806,18 +806,51 @@ class TimerModel: NSObject, ObservableObject {
    
     // 加载状态
     private func loadState() {
-        currentPhaseIndex = userDefaults.integer(forKey: "currentPhase")
-        remainingTime = userDefaults.integer(forKey: "remainingTime")
-        timerRunning = userDefaults.bool(forKey: "timerRunning")
-        completedCycles = userDefaults.integer(forKey: "completedCycles")
-        hasSkippedInCurrentCycle = userDefaults.bool(forKey: "hasSkippedInCurrentCycle")
-        currentCycleCompleted = userDefaults.bool(forKey: "currentCycleCompleted")
-        lastUsageTime = userDefaults.double(forKey: "lastUsageTime")
-        lastCycleCompletionTime = userDefaults.double(forKey: "lastCycleCompletionTime")
-        totalTime = userDefaults.integer(forKey: "totalTime")
-        currentPhaseName = userDefaults.string(forKey: "currentPhaseName") ?? ""
-        loadPhaseCompletionStatus()
-        updateTomatoRingPosition()
+        if let data = userDefaults.data(forKey: "timerState"),
+           let state = try? JSONDecoder().decode(TimerState.self, from: data) {
+            // 先加载基本状态
+            currentPhaseIndex = state.currentPhaseIndex
+            remainingTime = state.remainingTime
+            timerRunning = state.timerRunning
+            completedCycles = state.completedCycles
+            totalTime = state.totalTime
+            currentPhaseName = state.currentPhaseName
+            
+            // 直接从保存的状态中恢复阶段完成状态
+            phaseCompletionStatus = state.phaseCompletionStatus
+            
+            // 确保阶段完成状态数组长度正确
+            if phaseCompletionStatus.count != phases.count {
+                phaseCompletionStatus = Array(repeating: .notStarted, count: phases.count)
+                
+                // 根据currentPhaseIndex恢复之前阶段的状态
+                for i in 0..<currentPhaseIndex {
+                    if let savedStatus = state.phaseCompletionStatus[safe: i] {
+                        phaseCompletionStatus[i] = savedStatus
+                    } else {
+                        phaseCompletionStatus[i] = .normalCompleted
+                    }
+                }
+                
+                // 设置当前阶段状态
+                phaseCompletionStatus[currentPhaseIndex] = .current
+            }
+            
+            // 确保计时器状态一致性
+            if timerRunning {
+                if endTime == nil {
+                    timerRunning = false
+                }
+            }
+            
+            updateTomatoRingPosition()
+            
+            // 保存恢复的状态
+            savePhaseCompletionStatus()
+        } else {
+            // 如果加载失败，重置到初始状态
+            resetCycle()
+        }
     }
 
     // 加载阶段完成状态
@@ -1120,5 +1153,12 @@ extension TimerModel: WKExtendedRuntimeSessionDelegate {
             // 清理状态
             self.extendedSession = nil
         }
+    }
+}
+
+// 添加安全访问数组的扩展
+extension Array {
+    subscript(safe index: Int) -> Element? {
+        return indices.contains(index) ? self[index] : nil
     }
 }
