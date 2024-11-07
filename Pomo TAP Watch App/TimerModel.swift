@@ -502,9 +502,12 @@ class TimerModel: NSObject, ObservableObject {
                     nextPhaseDuration: phases[(currentPhaseIndex + 1) % phases.count].duration / 60
                 )
                 notificationSent = true
+                
+                // 添加延迟以确保通知发送完成
+                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5秒
             }
             
-            // 无论前台还是后台，都进入下一阶段
+            // 移动到下一阶段
             await moveToNextPhase(autoStart: false, skip: false)
             
             // 只在前台播放音效和触觉反馈
@@ -512,7 +515,6 @@ class TimerModel: NSObject, ObservableObject {
                 playSound(.success)
                 sendHapticFeedback()
             }
-            // 在后台时不自动进入下一阶段，等待用户通过通知操作
             
             saveState()
         }

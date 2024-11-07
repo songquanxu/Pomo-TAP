@@ -39,15 +39,17 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
         completionHandler([.banner, .sound])
     }
     
-    // 请求通知权限
+    // 优化权限请求方法
     @MainActor
     func requestNotificationPermission() {
         Task {
             do {
                 let granted = try await UNUserNotificationCenter.current().requestAuthorization(
-                    options: [.alert, .sound]
+                    options: [.alert, .sound, .badge]
                 )
                 if granted {
+                    // 权限获取成功后，立即设置通知类别
+                    try setupNotificationCategory()
                     logger.info("通知权限已获得")
                 } else {
                     logger.warning("用户拒绝了通知权限")
@@ -66,11 +68,11 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
         logger.info("当前通知权限状态: \(settings.authorizationStatus.rawValue)")
     }
     
-    // 发送通知
+    // 优化通知发送方法
     func sendNotification(for event: NotificationEvent, currentPhaseDuration: Int, nextPhaseDuration: Int) {
         Task {
             do {
-                // 检查权限
+                // 检查权限状态
                 let settings = await UNUserNotificationCenter.current().notificationSettings()
                 guard settings.authorizationStatus == .authorized else {
                     logger.warning("通知权限未获得，无法发送通知")
@@ -101,9 +103,8 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                         currentPhaseType
                     )
                     
-                    // 设置通知动作
-                    let category = try setupNotificationCategory()
-                    content.categoryIdentifier = category.identifier
+                    // 设置通知类别
+                    content.categoryIdentifier = "PHASE_COMPLETED"
                 }
                 
                 // 创建通知请求
@@ -113,7 +114,10 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                     trigger: nil  // 立即触发
                 )
                 
-                // 添加通知请求
+                // 移除所有待处理的通知
+                await UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+                
+                // 添加新通知
                 try await UNUserNotificationCenter.current().add(request)
                 logger.info("通知发送成功: \(content.body)")
             } catch {
