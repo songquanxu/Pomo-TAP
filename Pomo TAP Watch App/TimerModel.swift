@@ -4,6 +4,7 @@ import Combine
 import UserNotifications
 import os
 import CoreData
+import WidgetKit
 
 // 定义阶段状态的枚举，表示番茄钟的不同状态
 enum PhaseStatus: String, Codable {
@@ -27,7 +28,7 @@ class TimerModel: NSObject, ObservableObject {
     @Published var completedCycles: Int // 完成的周期数
     @Published var isAppActive = true // 应用是否处于活动状态
     @Published var lastBackgroundDate: Date? // 上次进入后台的时间
-    @Published var hasSkippedInCurrentCycle = false // 当前期是否跳过
+    @Published var hasSkippedInCurrentCycle = false // 当前是否跳过
     @Published var isResetState = false // 是否处于重置状态
     @Published var isInDecisionMode = false // 是否处于决策模式
     @Published var isInCooldownMode = false // 是否处于冷却模式
@@ -106,7 +107,7 @@ class TimerModel: NSObject, ObservableObject {
             case .none: return "无会话"
             case .starting: return "启动中"
             case .running: return "运行中"
-            case .stopping: return "停止中"
+            case .stopping: return "停止��"
             case .invalid: return "无效"
             }
         }
@@ -201,6 +202,9 @@ class TimerModel: NSObject, ObservableObject {
             userDefaults.set(Date().timeIntervalSince1970, forKey: LAST_PAUSE_TIME_KEY)
         }
         userDefaults.set(Date().timeIntervalSince1970, forKey: LAST_ACTIVE_TIME_KEY)
+        
+        // 添加共享状态更新
+        updateSharedState()
     }
 
     // 重置阶段完成状态
@@ -402,7 +406,7 @@ class TimerModel: NSObject, ObservableObject {
             playSound(.stop)
             stopTimer()
             
-            // 等待一小段时间再停止会话
+            // 等待一小段时��再停止会话
             try? await Task.sleep(nanoseconds: 200_000_000) // 0.2秒
             stopExtendedSession()
         } else {
@@ -483,7 +487,7 @@ class TimerModel: NSObject, ObservableObject {
         
         if timeDifference > 1 {
             self.remainingTime = adjustedRemainingTime
-            logger.info("时间同步成功。调整后的剩余时间: \(self.remainingTime) 秒。")
+            logger.info("时间同步��功。调整后的剩余时间: \(self.remainingTime) 秒。")
         } else {
             logger.debug("时间同步检查通过。当前剩余时间: \(self.remainingTime) 秒，无需调整。")
         }
@@ -649,7 +653,7 @@ class TimerModel: NSObject, ObservableObject {
         logger.info("正在启动新的扩展会话: \(session)")
     }
 
-    // 停止扩展会话
+    // 停止扩展话
     func stopExtendedSession() {
         guard let session = extendedSession else { return }
         
@@ -669,7 +673,7 @@ class TimerModel: NSObject, ObservableObject {
         case .running:
             sessionState = .stopping
             
-            // 使用串行队列确保操作顺序
+            // 使用串行��列确保操作顺序
             DispatchQueue.main.async { [weak self] in
                 guard let self = self else { return }
                 
@@ -739,7 +743,7 @@ class TimerModel: NSObject, ObservableObject {
     // 应用变为非活动状态
     func appBecameInactive() {
         saveState()
-        logger.info("应用变为非活动状态，已保存当前状态。")
+        logger.info("应用变为非活状态，已保存当前状态。")
     }
 
     // 应用进入后台
@@ -762,7 +766,7 @@ class TimerModel: NSObject, ObservableObject {
         // 安排后台刷新
         scheduleBackgroundRefresh()
         
-        logger.info("应用已进入后台模式，已完成必要设置")
+        logger.info("应用已进入后台模式，已完成必要��置")
     }
 
     // 安排后台刷新
@@ -1026,6 +1030,26 @@ class TimerModel: NSObject, ObservableObject {
     func handleNotificationResponse() async {
         isAppActive = true
         await startTimer()
+    }
+
+    // 添加以下方法
+    private func updateSharedState() {
+        let sharedState = SharedTimerState(
+            currentPhaseIndex: currentPhaseIndex,
+            remainingTime: remainingTime,
+            timerRunning: timerRunning,
+            currentPhaseName: currentPhaseName,
+            lastUpdateTime: Date(),
+            totalTime: totalTime
+        )
+        
+        if let data = try? JSONEncoder().encode(sharedState),
+           let userDefaults = UserDefaults(suiteName: SharedTimerState.suiteName) {
+            userDefaults.set(data, forKey: SharedTimerState.userDefaultsKey)
+        }
+        
+        // 通知 Widget 更新
+        WidgetCenter.shared.reloadAllTimelines()
     }
 }
 

@@ -27,6 +27,13 @@ struct Pomo_TAPApp: App {
             ContentView()
                 .environmentObject(timerModel)
                 .environmentObject(notificationDelegate)
+                .onOpenURL { url in
+                    // 处理从复杂功能打开应用的事件
+                    if url.scheme == "pomoTAP" {
+                        // 使用正确的 API 激活应用
+                        WKExtension.shared().openSystemURL(url)
+                    }
+                }
                 .alert("需要通知权限", isPresented: $showNotificationPermissionAlert) {
                     Button("去设置", role: .none) {
                         openSettings()

@@ -61,5 +61,16 @@
 		<key>WKSupportsAlwaysOnDisplay</key>
 		<false/>
 	</dict>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>pomoTAP</string>
+			</array>
+			<key>CFBundleURLName</key>
+			<string>com.songquan.pomoTAP</string>
+		</dict>
+	</array>
 </dict>
 </plist>
