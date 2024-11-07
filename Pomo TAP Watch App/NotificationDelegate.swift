@@ -35,8 +35,15 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        // 无论前台还是后台都显示通知
-        completionHandler([.banner, .sound])
+        // 检查应用状态
+        let appState = WKExtension.shared().applicationState
+        if appState == .active {
+            // 前台不显示通知
+            completionHandler([])
+        } else {
+            // 后台显示通知和播放声音
+            completionHandler([.banner, .sound])
+        }
     }
     
     // 优化权限请求方法
@@ -73,6 +80,13 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
     func sendNotification(for event: NotificationEvent, currentPhaseDuration: Int, nextPhaseDuration: Int) {
         Task {
             do {
+                // 检查应用状态
+                let appState = await WKExtension.shared().applicationState
+                guard appState != .active else {
+                    logger.debug("应用在前台，跳过通知")
+                    return
+                }
+                
                 // 检查权限状态
                 let settings = await UNUserNotificationCenter.current().notificationSettings()
                 guard settings.authorizationStatus == .authorized else {
@@ -88,24 +102,18 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                 
                 switch event {
                 case .phaseCompleted:
-                    // 设置通知标题
-                    content.title = NSLocalizedString("Great_Job", comment: "通知标题：完成一个番茄时显示")
-                    
-                    // 获取当前阶段的类型描述
-                    let currentPhaseName = await timerModel.currentPhaseName
+                    content.title = NSLocalizedString("Great_Job", comment: "")
                     let currentPhaseType = NSLocalizedString(
-                        getPhaseLocalizationKey(for: currentPhaseName),
+                        getPhaseLocalizationKey(for: await timerModel.currentPhaseName),
                         comment: "阶段类型：专注/短休息/长休息"
                     )
                     
-                    // 设置通知内容
                     content.body = String(
                         format: NSLocalizedString("Notification_Body", comment: "通知内容：%d = 持续时间（分钟），%@ = 阶段类型"),
                         nextPhaseDuration,
                         currentPhaseType
                     )
                     
-                    // 设置通知类别
                     content.categoryIdentifier = "PHASE_COMPLETED"
                 }
                 
@@ -116,8 +124,9 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                     trigger: nil  // 立即触发
                 )
                 
-                // 移除待处理的通知
+                // 移除之前的通知
                 UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+                UNUserNotificationCenter.current().removeAllDeliveredNotifications()
                 
                 // 添加新通知
                 try await UNUserNotificationCenter.current().add(request)
