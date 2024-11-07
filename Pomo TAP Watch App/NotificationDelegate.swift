@@ -48,8 +48,9 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                     options: [.alert, .sound, .badge]
                 )
                 if granted {
-                    // 权限获取成功后，立即设置通知类别
-                    try setupNotificationCategory()
+                    // 权限获取成功后，设置通知类别并使用返回值
+                    let category = try setupNotificationCategory()
+                    UNUserNotificationCenter.current().setNotificationCategories([category])
                     logger.info("通知权限已获得")
                 } else {
                     logger.warning("用户拒绝了通知权限")
@@ -91,8 +92,9 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                     content.title = NSLocalizedString("Great_Job", comment: "通知标题：完成一个番茄时显示")
                     
                     // 获取当前阶段的类型描述
+                    let currentPhaseName = await timerModel.currentPhaseName
                     let currentPhaseType = NSLocalizedString(
-                        getPhaseLocalizationKey(for: await timerModel.currentPhaseName),
+                        getPhaseLocalizationKey(for: currentPhaseName),
                         comment: "阶段类型：专注/短休息/长休息"
                     )
                     
@@ -114,8 +116,8 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                     trigger: nil  // 立即触发
                 )
                 
-                // 移除所有待处理的通知
-                await UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+                // 移除待处理的通知
+                UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
                 
                 // 添加新通知
                 try await UNUserNotificationCenter.current().add(request)
