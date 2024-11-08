@@ -37,34 +37,23 @@ struct ContentView: View {
         }
         .edgesIgnoringSafeArea(.all)
         .onChange(of: scenePhase) { oldPhase, newPhase in
-            handleScenePhaseChange(newPhase)
-        }
-
-    }
-    
-    private func handleScenePhaseChange(_ newPhase: ScenePhase) {
-        Task {
-            switch newPhase {
-            case .active:
-                // 只有在之前不是活动状态时才调用 appBecameActive
-                if !timerModel.isAppActive {
-                    await timerModel.appBecameActive()
-                }
-            case .inactive:
-                // 在变为非活动状态时处理
-                timerModel.appBecameInactive()
-            case .background:
-                do {
-                    // 等待一小段时间确保状态转换完成
-                    try await Task.sleep(nanoseconds: 100_000_000) // 等待 0.1 秒
+            Task {
+                switch newPhase {
+                case .active:
+                    // 从后台恢复时，确保状态同步
+                    if oldPhase == .background {
+                        await timerModel.appBecameActive()
+                    }
+                case .background:
                     timerModel.appEnteredBackground()
-                } catch {
-                    // 如果 sleep 被取消，直接进入后台
-                    timerModel.appEnteredBackground()
+                default:
+                    break
                 }
-            @unknown default:
-                break
             }
+        }
+        .task {
+            // 首次加载时同步状态
+            await timerModel.appBecameActive()
         }
     }
     

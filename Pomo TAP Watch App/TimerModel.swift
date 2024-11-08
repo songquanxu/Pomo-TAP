@@ -337,7 +337,7 @@ class TimerModel: NSObject, ObservableObject {
 
     // 移动到下一个阶段
     func moveToNextPhase(autoStart: Bool, skip: Bool = false) async {
-        // 重置通知状���
+        // 重置通知状态
         notificationSent = false
         
         startTransitionAnimation()
@@ -406,7 +406,7 @@ class TimerModel: NSObject, ObservableObject {
             playSound(.stop)
             stopTimer()
             
-            // 等待一小段时间��停止会话
+            // 等待一小段时间停止会话
             try? await Task.sleep(nanoseconds: 200_000_000) // 0.2秒
             stopExtendedSession()
         } else {
@@ -722,10 +722,10 @@ class TimerModel: NSObject, ObservableObject {
     func appBecameActive() async {
         isAppActive = true
         
-        // 检查并重置进度（在同步时间之前）
-        checkAndResetProgress()
+        // 检查并重置进度
+        await checkAndResetProgress()
         
-        // 原有的同步逻辑
+        // 同步计时器状态
         synchronizeTimerState()
         
         // 检查并更新UI状态
@@ -735,13 +735,7 @@ class TimerModel: NSObject, ObservableObject {
         if timerRunning {
             await startTimer()
         }
-        
-        // 通知UI更新
-        NotificationCenter.default.post(
-            name: .timerStateUpdated,
-            object: self
-        )
-    }   
+    }
 
     // 应用变为非活动状态
     func appBecameInactive() {
@@ -821,25 +815,23 @@ class TimerModel: NSObject, ObservableObject {
     private func loadState() {
         if let data = userDefaults.data(forKey: "timerState"),
            let state = try? JSONDecoder().decode(TimerState.self, from: data) {
-            // 先加载基本状态
-            currentPhaseIndex = state.currentPhaseIndex
-            remainingTime = state.remainingTime
-            timerRunning = state.timerRunning
-            completedCycles = state.completedCycles
-            totalTime = state.totalTime
-            currentPhaseName = state.currentPhaseName
-            
-            // 直接从保存的状态中恢复阶段完成状态
-            phaseCompletionStatus = state.phaseCompletionStatus
-            
-            // 确保阶段完成状态数组长度正确
-            if phaseCompletionStatus.count != phases.count {
+            Task { @MainActor in
+                // 先加载基本状态
+                currentPhaseIndex = state.currentPhaseIndex
+                remainingTime = state.remainingTime
+                timerRunning = state.timerRunning
+                completedCycles = state.completedCycles
+                totalTime = state.totalTime
+                currentPhaseName = state.currentPhaseName
+                
+                // 重建阶段完成状态
                 phaseCompletionStatus = Array(repeating: .notStarted, count: phases.count)
                 
-                // 根据currentPhaseIndex恢复之前阶段的状态
+                // 更新之前阶段的状态
                 for i in 0..<currentPhaseIndex {
-                    if let savedStatus = state.phaseCompletionStatus[safe: i] {
-                        phaseCompletionStatus[i] = savedStatus
+                    if let savedStatus = state.phaseCompletionStatus[safe: i],
+                       savedStatus == .skipped {
+                        phaseCompletionStatus[i] = .skipped
                     } else {
                         phaseCompletionStatus[i] = .normalCompleted
                     }
@@ -847,21 +839,16 @@ class TimerModel: NSObject, ObservableObject {
                 
                 // 设置当前阶段状态
                 phaseCompletionStatus[currentPhaseIndex] = .current
-            }
-            
-            // 确保计时器状态一致性
-            if timerRunning {
-                if endTime == nil {
-                    timerRunning = false
+                
+                // 如果计时器在运行，恢复计时器状态
+                if timerRunning {
+                    await startTimer()
                 }
+                
+                updateTomatoRingPosition()
             }
-            
-            updateTomatoRingPosition()
-            
-            // 保存恢复的状态
-            savePhaseCompletionStatus()
         } else {
-            // 如果加载失败，重置到初始状态
+            // 如果没有保存的状态，重置到初始状态
             resetCycle()
         }
     }
@@ -940,7 +927,10 @@ class TimerModel: NSObject, ObservableObject {
             
             let now = Date()
             if now >= endTime {
-                handlePhaseCompletion()
+                Task { @MainActor in
+                    remainingTime = 0
+                    await handlePhaseCompletion()
+                }
             } else {
                 remainingTime = Int(endTime.timeIntervalSince(now))
                 updateTomatoRingPosition()
@@ -971,35 +961,14 @@ class TimerModel: NSObject, ObservableObject {
         )
     }
 
-    // 添加检查和重置方法
-    private func checkAndResetProgress() {
-        let currentTime = Date().timeIntervalSince1970
-        
-        // 检查暂停时间
-        if !timerRunning {
-            if let lastPauseTime = userDefaults.double(forKey: LAST_PAUSE_TIME_KEY) as TimeInterval?,
-               lastPauseTime > 0 {
-                let pauseDuration = currentTime - lastPauseTime
-                
-                if pauseDuration >= PAUSE_RESET_THRESHOLD {
-                    // 重置当前阶段
-                    remainingTime = phases[currentPhaseIndex].duration
-                    totalTime = phases[currentPhaseIndex].duration
-                    updateTomatoRingPosition()
-                    logger.info("由于暂停时间过长（\(Int(pauseDuration/60))分钟），已重置当前阶段")
-                }
-            }
-        }
-        
-        // 检查周期停止时间
-        if let lastActiveTime = userDefaults.double(forKey: LAST_ACTIVE_TIME_KEY) as TimeInterval?,
-           lastActiveTime > 0 {
-            let inactiveDuration = currentTime - lastActiveTime
-            
-            if inactiveDuration >= CYCLE_RESET_THRESHOLD {
-                // 重置整个周期
-                resetCycleQuietly()
-                logger.info("由于停止时间过长（\(Int(inactiveDuration/3600))小时），已重置当前周期")
+    // 添加进度检查方法
+    private func checkAndResetProgress() async {
+        if let endTime = endTime {
+            let now = Date()
+            if now >= endTime && timerRunning {
+                // 如果时间已到但状态未更新，强制更新
+                remainingTime = 0
+                await handlePhaseCompletion()
             }
         }
     }
