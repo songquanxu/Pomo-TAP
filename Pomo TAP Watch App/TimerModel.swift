@@ -1038,18 +1038,29 @@ class TimerModel: NSObject, ObservableObject {
 
     // 添加以下方法
     private func updateSharedState() {
+        // 转换阶段信息
+        let phaseInfos = phases.map { phase in
+            PhaseInfo(
+                duration: phase.duration,
+                name: phase.name,
+                status: phase.status.rawValue
+            )
+        }
+        
         let sharedState = SharedTimerState(
             currentPhaseIndex: currentPhaseIndex,
             remainingTime: remainingTime,
             timerRunning: timerRunning,
             currentPhaseName: currentPhaseName,
             lastUpdateTime: Date(),
-            totalTime: totalTime
+            totalTime: totalTime,
+            phases: phaseInfos
         )
         
         if let data = try? JSONEncoder().encode(sharedState),
            let userDefaults = UserDefaults(suiteName: SharedTimerState.suiteName) {
             userDefaults.set(data, forKey: SharedTimerState.userDefaultsKey)
+            userDefaults.synchronize()  // 确保立即写入
         }
         
         // 通知 Widget 更新

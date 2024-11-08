@@ -28,19 +28,61 @@ struct Provider: TimelineProvider {
     }
 
     func getTimeline(in context: Context, completion: @escaping (Timeline<ComplicationEntry>) -> ()) {
-        let entry = loadCurrentState()
+        let currentEntry = loadCurrentState()
+        var entries: [ComplicationEntry] = [currentEntry]
         
-        // 根据计时器状态决定更新策略
-        let updateDate: Date
-        if entry.isRunning {
-            // 如果计时器在运行，每分钟更新一次
-            updateDate = Date().addingTimeInterval(60)
-        } else {
-            // 如果计时器暂停，延迟更长时间再更新
-            updateDate = Date().addingTimeInterval(300) // 5分钟
+        // 如果计时器正在运行，预生成未来的时间点
+        if currentEntry.isRunning {
+            let currentDate = Date()
+            let calendar = Calendar.current
+            
+            // 计算下一个整分钟
+            var nextDate = calendar.date(
+                bySetting: .second,
+                value: 0,
+                of: calendar.date(byAdding: .minute, value: 1, to: currentDate) ?? currentDate
+            ) ?? currentDate
+            
+            // 生成未来5分钟的时间点
+            for _ in 0..<5 {
+                if let userDefaults = UserDefaults(suiteName: SharedTimerState.suiteName),
+                   let data = userDefaults.data(forKey: SharedTimerState.userDefaultsKey),
+                   let state = try? JSONDecoder().decode(SharedTimerState.self, from: data) {
+                    
+                    // 计算该时间点的剩余时间
+                    let elapsedTime = nextDate.timeIntervalSince(currentDate)
+                    let remainingTime = max(0, Double(state.remainingTime) - elapsedTime)
+                    let progress = 1.0 - (remainingTime / Double(state.totalTime))
+                    
+                    let entry = ComplicationEntry(
+                        date: nextDate,
+                        phase: state.currentPhaseName.lowercased(),
+                        isRunning: true,
+                        progress: progress
+                    )
+                    entries.append(entry)
+                }
+                
+                nextDate = calendar.date(byAdding: .minute, value: 1, to: nextDate) ?? nextDate
+            }
         }
         
-        let timeline = Timeline(entries: [entry], policy: .after(updateDate))
+        // 设置更新时间
+        let nextUpdateDate: Date
+        if currentEntry.isRunning {
+            // 如果计时器运行中，在下一个整分钟更新
+            let calendar = Calendar.current
+            nextUpdateDate = calendar.date(
+                bySetting: .second,
+                value: 0,
+                of: calendar.date(byAdding: .minute, value: 1, to: Date()) ?? Date()
+            ) ?? Date()
+        } else {
+            // 如果计时器暂停，5分钟后再更新
+            nextUpdateDate = Date().addingTimeInterval(300)
+        }
+        
+        let timeline = Timeline(entries: entries, policy: .after(nextUpdateDate))
         completion(timeline)
     }
     
@@ -55,9 +97,12 @@ struct Provider: TimelineProvider {
         // 计算进度
         let progress = 1.0 - (Double(state.remainingTime) / Double(state.totalTime))
         
+        // 获取当前阶段的正确名称
+        let phaseName = state.phases[state.currentPhaseIndex].name.lowercased()
+        
         return ComplicationEntry(
             date: state.lastUpdateTime,
-            phase: state.currentPhaseName.lowercased(),
+            phase: phaseName,
             isRunning: state.timerRunning,
             progress: progress
         )
