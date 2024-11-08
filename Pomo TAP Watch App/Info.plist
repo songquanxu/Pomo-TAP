@@ -48,7 +48,6 @@
 	</array>
 	<key>UIBackgroundModes</key>
 	<array>
-		<string>audio</string>
 		<string>remote-notification</string>
 		<string>processing</string>
 	</array>
@@ -58,8 +57,6 @@
 	<dict>
 		<key>WKAlwaysRunsInBackground</key>
 		<true/>
-		<key>WKSupportsAlwaysOnDisplay</key>
-		<false/>
 	</dict>
 	<key>CFBundleURLTypes</key>
 	<array>
@@ -72,5 +69,7 @@
 			<string>com.songquan.pomoTAP</string>
 		</dict>
 	</array>
+	<key>WKRunsIndependentlyOfCompanionApp</key>
+	<true/>
 </dict>
 </plist>

@@ -337,7 +337,7 @@ class TimerModel: NSObject, ObservableObject {
 
     // 移动到下一个阶段
     func moveToNextPhase(autoStart: Bool, skip: Bool = false) async {
-        // 重置通知状态
+        // 重置通知状���
         notificationSent = false
         
         startTransitionAnimation()
@@ -406,7 +406,7 @@ class TimerModel: NSObject, ObservableObject {
             playSound(.stop)
             stopTimer()
             
-            // 等待一小段时间再停止会话
+            // 等待一小段时间��停止会话
             try? await Task.sleep(nanoseconds: 200_000_000) // 0.2秒
             stopExtendedSession()
         } else {
@@ -464,10 +464,10 @@ class TimerModel: NSObject, ObservableObject {
             self.remainingTime = newRemainingTime
             updateTomatoRingPosition()
             
-            // 如果时间到达零，立即处理完成事件
+            // 如果时间到达零，立即处理
             if newRemainingTime == 0 {
-                // 先发送通知，再停止计时器
                 Task { @MainActor in
+                    // 先发送通知
                     if !notificationSent {
                         notificationDelegate?.sendNotification(
                             for: .phaseCompleted,
@@ -475,9 +475,12 @@ class TimerModel: NSObject, ObservableObject {
                             nextPhaseDuration: phases[(currentPhaseIndex + 1) % phases.count].duration / 60
                         )
                         notificationSent = true
+                        
+                        // 等待通知发送完成
+                        try? await Task.sleep(nanoseconds: 500_000_000)
                     }
                     
-                    // 然后停止计时器并处理完成事件
+                    // 停止计时器并处理完成事件
                     stopTimer()
                     handlePhaseCompletion()
                 }

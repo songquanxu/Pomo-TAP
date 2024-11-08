@@ -35,14 +35,16 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        // 检查应用状态
-        let appState = WKExtension.shared().applicationState
-        if appState == .active {
-            // 前台不显示通知
-            completionHandler([])
-        } else {
-            // 后台显示通知和播放声音
-            completionHandler([.banner, .sound])
+        Task {
+            // 检查应用状态（添加 await）
+            let appState = await WKExtension.shared().applicationState
+            if appState == .active {
+                // 前台不显示通知
+                completionHandler([])
+            } else {
+                // 后台显示通知和播放声音
+                completionHandler([.banner, .sound])
+            }
         }
     }
     
@@ -80,13 +82,6 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
     func sendNotification(for event: NotificationEvent, currentPhaseDuration: Int, nextPhaseDuration: Int) {
         Task {
             do {
-                // 检查应用状态
-                let appState = await WKExtension.shared().applicationState
-                guard appState != .active else {
-                    logger.debug("应用在前台，跳过通知")
-                    return
-                }
-                
                 // 检查权限状态
                 let settings = await UNUserNotificationCenter.current().notificationSettings()
                 guard settings.authorizationStatus == .authorized else {
@@ -97,7 +92,8 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                 // 创建通知内容
                 let content = UNMutableNotificationContent()
                 content.sound = .default
-                content.interruptionLevel = .timeSensitive
+                content.interruptionLevel = .timeSensitive  // 设置为时间敏感
+                content.relevanceScore = 1.0  // 设置最高优先级
                 content.threadIdentifier = "PomoTAP_Notifications"
                 
                 switch event {
@@ -114,17 +110,24 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                         currentPhaseType
                     )
                     
+                    // 设置通知类别
                     content.categoryIdentifier = "PHASE_COMPLETED"
                 }
+                
+                // 创建立即触发的触发器
+                let trigger = UNTimeIntervalNotificationTrigger(
+                    timeInterval: 1,
+                    repeats: false
+                )
                 
                 // 创建通知请求
                 let request = UNNotificationRequest(
                     identifier: UUID().uuidString,
                     content: content,
-                    trigger: nil  // 立即触发
+                    trigger: trigger
                 )
                 
-                // 移除之前的通知
+                // 移除旧通知
                 UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
                 UNUserNotificationCenter.current().removeAllDeliveredNotifications()
                 

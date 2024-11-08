@@ -31,59 +31,34 @@ struct Provider: TimelineProvider {
         let currentEntry = loadCurrentState()
         var entries: [ComplicationEntry] = [currentEntry]
         
-        // 如果计时器正在运行，预生成未来的时间点
         if currentEntry.isRunning {
-            let currentDate = Date()
+            // 如果计时器在运行，生成更精确的时间线
             let calendar = Calendar.current
+            let now = Date()
             
-            // 计算下一个整分钟
-            var nextDate = calendar.date(
-                bySetting: .second,
-                value: 0,
-                of: calendar.date(byAdding: .minute, value: 1, to: currentDate) ?? currentDate
-            ) ?? currentDate
+            // 计算剩余的分钟数
+            let minutesRemaining = Int(currentEntry.progress * 100) / 5  // 假设总时间是25分钟
             
-            // 生成未来5分钟的时间点
-            for _ in 0..<5 {
-                if let userDefaults = UserDefaults(suiteName: SharedTimerState.suiteName),
-                   let data = userDefaults.data(forKey: SharedTimerState.userDefaultsKey),
-                   let state = try? JSONDecoder().decode(SharedTimerState.self, from: data) {
-                    
-                    // 计算该时间点的剩余时间
-                    let elapsedTime = nextDate.timeIntervalSince(currentDate)
-                    let remainingTime = max(0, Double(state.remainingTime) - elapsedTime)
-                    let progress = 1.0 - (remainingTime / Double(state.totalTime))
-                    
+            // 为每一分钟生成一个条目
+            for minute in 1...minutesRemaining {
+                if let futureDate = calendar.date(byAdding: .minute, value: minute, to: now) {
+                    let futureProgress = currentEntry.progress + (Double(minute) / 25.0)  // 25分钟为例
                     let entry = ComplicationEntry(
-                        date: nextDate,
-                        phase: state.currentPhaseName.lowercased(),
+                        date: futureDate,
+                        phase: currentEntry.phase,
                         isRunning: true,
-                        progress: progress
+                        progress: min(futureProgress, 1.0)
                     )
                     entries.append(entry)
                 }
-                
-                nextDate = calendar.date(byAdding: .minute, value: 1, to: nextDate) ?? nextDate
             }
-        }
-        
-        // 设置更新时间
-        let nextUpdateDate: Date
-        if currentEntry.isRunning {
-            // 如果计时器运行中，在下一个整分钟更新
-            let calendar = Calendar.current
-            nextUpdateDate = calendar.date(
-                bySetting: .second,
-                value: 0,
-                of: calendar.date(byAdding: .minute, value: 1, to: Date()) ?? Date()
-            ) ?? Date()
+            
+            // 使用 atEnd 策略，让系统在最后一个条目后请求新的时间线
+            completion(Timeline(entries: entries, policy: .atEnd))
         } else {
-            // 如果计时器暂停，5分钟后再更新
-            nextUpdateDate = Date().addingTimeInterval(300)
+            // 如果计时器暂停，5分钟后更新
+            completion(Timeline(entries: [currentEntry], policy: .after(Date().addingTimeInterval(300))))
         }
-        
-        let timeline = Timeline(entries: entries, policy: .after(nextUpdateDate))
-        completion(timeline)
     }
     
     private func loadCurrentState() -> ComplicationEntry {
@@ -119,8 +94,9 @@ struct ComplicationView: View {
                 .foregroundColor(entry.isRunning ? .orange : .gray)
         }
         .gaugeStyle(.accessoryCircular)
-        .containerBackground(.clear, for: .widget)
+        .widgetAccentable()
         .widgetURL(URL(string: "pomoTAP://open")!)
+        .containerBackground(.clear, for: .widget)
     }
     
     private var phaseSymbol: String {
@@ -151,6 +127,7 @@ struct PomoTAPComplication: Widget {
         .configurationDisplayName("Pomo TAP")
         .description("显示当前番茄钟状态")
         .supportedFamilies([.accessoryCircular])
+        .containerBackgroundRemovable(true)
     }
 }
 
