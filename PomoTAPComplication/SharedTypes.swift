@@ -8,10 +8,26 @@ struct SharedTimerState: Codable {
     let lastUpdateTime: Date
     let totalTime: Int
     let phases: [PhaseInfo]
-    let lastUpdateProgress: Double
     
-    static let userDefaultsKey = "SharedTimerState"
-    static let suiteName = "group.com.songquan.pomoTAP.shared"
+    var progress: Double {
+        1.0 - Double(remainingTime) / Double(totalTime)
+    }
+    
+    var standardizedPhaseName: String {
+        switch currentPhaseName.lowercased() {
+        case "work", "专注":
+            return "work"
+        case "short break", "短休息":
+            return "shortBreak"
+        case "long break", "长休息":
+            return "longBreak"
+        default:
+            return "work"
+        }
+    }
+    
+    static let userDefaultsKey = "TimerState"
+    static let suiteName = "group.songquan.Pomo-TAP"
 }
 
 struct PhaseInfo: Codable {

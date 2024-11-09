@@ -329,13 +329,13 @@ class WristStateManager: NSObject, ObservableObject {
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(willActivate),
-            name: NSNotification.Name("WKApplicationWillEnterForeground"),
+            name: WKApplication.willEnterForegroundNotification,
             object: nil
         )
         NotificationCenter.default.addObserver(
             self,
             selector: #selector(didDeactivate),
-            name: NSNotification.Name("WKApplicationDidEnterBackground"),
+            name: WKApplication.didEnterBackgroundNotification,
             object: nil
         )
     }

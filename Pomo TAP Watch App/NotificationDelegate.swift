@@ -36,16 +36,12 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         Task {
-                // 无论前后台都显示和播放声音（测试用）
-//                completionHandler([.banner, .sound])
-
-            // 检查应用状态（添加 await）
             let appState = await WKExtension.shared().applicationState
             if appState == .active {
                 // 前台不显示通知
                 completionHandler([])
             } else {
-                // 后台显示通知和播放声音 
+                // 后台显示通知和播放声音
                 completionHandler([.banner, .sound])
             }
         }
@@ -81,7 +77,7 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
         logger.info("当前通知权限状态: \(settings.authorizationStatus.rawValue)")
     }
     
-    // 优化通知发送方法
+    // 修改通知发送方法
     func sendNotification(for event: NotificationEvent, currentPhaseDuration: Int, nextPhaseDuration: Int) {
         Task {
             do {
@@ -91,15 +87,11 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                     logger.warning("通知权限未获得，无法发送通知")
                     return
                 }
-                // 移除旧通知
-                UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
-                UNUserNotificationCenter.current().removeAllDeliveredNotifications()   
-
+                
                 // 创建通知内容
                 let content = UNMutableNotificationContent()
                 content.sound = .default
-                content.interruptionLevel = .timeSensitive  // 设置为时间敏感
-                content.relevanceScore = 1.0  // 设置最高优先级
+                content.interruptionLevel = .timeSensitive
                 content.threadIdentifier = "PomoTAP_Notifications"
                 
                 switch event {
@@ -116,13 +108,12 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                         currentPhaseType
                     )
                     
-                    // 设置通知类别
                     content.categoryIdentifier = "PHASE_COMPLETED"
                 }
                 
-                // 创建立即触发的触发器
+                // 创建触发器，设置为当前阶段的持续时间
                 let trigger = UNTimeIntervalNotificationTrigger(
-                    timeInterval: 1,
+                    timeInterval: TimeInterval(currentPhaseDuration * 60),
                     repeats: false
                 )
                 
@@ -132,13 +123,16 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                     content: content,
                     trigger: trigger
                 )
-            
+                
+                // 移除之前的通知
+                UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+                UNUserNotificationCenter.current().removeAllDeliveredNotifications()
                 
                 // 添加新通知
                 try await UNUserNotificationCenter.current().add(request)
-                logger.info("通知发送成功: \(content.body)")
+                logger.info("通知已安排，将在 \(currentPhaseDuration) 分钟后发送")
             } catch {
-                logger.error("发送通知失败: \(error.localizedDescription)")
+                logger.error("安排通知失败: \(error.localizedDescription)")
             }
         }
     }
