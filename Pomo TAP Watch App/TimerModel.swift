@@ -333,10 +333,10 @@ class TimerModel: NSObject, ObservableObject {
     }
 
     // 开始下一个阶段
-    func startNextPhase() async { // 添加 async
-        isAppActive = true
-        await moveToNextPhase(autoStart: true, skip: false)
-    }
+//    func startNextPhase() async { // 添加 async
+////        isAppActive = true
+//        await moveToNextPhase(autoStart: true, skip: false)
+//    }
 
     // 移动到下一个阶段
     func moveToNextPhase(autoStart: Bool, skip: Bool = false) async {
@@ -515,21 +515,7 @@ class TimerModel: NSObject, ObservableObject {
     // 处理阶段完成##
     private func handlePhaseCompletion() {
         Task { @MainActor in
-            // 先发送通知
-            // if !notificationSent {
-            //     notificationDelegate?.sendNotification(
-            //         for: .phaseCompleted,
-            //         currentPhaseDuration: phases[currentPhaseIndex].duration / 60,
-            //         nextPhaseDuration: phases[(currentPhaseIndex + 1) % phases.count].duration / 60
-            //     )
-            //     notificationSent = true
-                
-            //     // 等待通知发送完成
-            //     try? await Task.sleep(nanoseconds: 500_000_000)
-            // }
-            
-            // 移动到下一阶段
-            await moveToNextPhase(autoStart: false, skip: false)
+
             
             // 只在前台播放音效
             if isAppActive {
@@ -537,6 +523,10 @@ class TimerModel: NSObject, ObservableObject {
                 sendHapticFeedback()
             }
             
+            // 移动到下一阶段
+            await moveToNextPhase(autoStart: false, skip: false)
+            
+
             saveState()
         }
     }
@@ -753,12 +743,14 @@ class TimerModel: NSObject, ObservableObject {
 
     // 应用变为非活动状态
     func appBecameInactive() {
+        isAppActive = false
         saveState()
         logger.info("应用变为非活状态，已保存当前状态。")
     }
 
     // 应用进入后台
     func appEnteredBackground() {
+        isAppActive = false
         guard timerRunning else {
             logger.debug("计时器未运行，无需处理后台任务")
             return

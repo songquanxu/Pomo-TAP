@@ -36,13 +36,16 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
         Task {
+                // 无论前后台都显示和播放声音（测试用）
+//                completionHandler([.banner, .sound])
+
             // 检查应用状态（添加 await）
             let appState = await WKExtension.shared().applicationState
             if appState == .active {
                 // 前台不显示通知
                 completionHandler([])
             } else {
-                // 后台显示通知和播放声音
+                // 后台显示通知和播放声音 
                 completionHandler([.banner, .sound])
             }
         }
@@ -88,7 +91,10 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                     logger.warning("通知权限未获得，无法发送通知")
                     return
                 }
-                
+                // 移除旧通知
+                UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+                UNUserNotificationCenter.current().removeAllDeliveredNotifications()   
+
                 // 创建通知内容
                 let content = UNMutableNotificationContent()
                 content.sound = .default
@@ -126,10 +132,7 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                     content: content,
                     trigger: trigger
                 )
-                
-                // 移除旧通知
-                UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
-                UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+            
                 
                 // 添加新通知
                 try await UNUserNotificationCenter.current().add(request)
