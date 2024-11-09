@@ -26,7 +26,7 @@ struct Provider: TimelineProvider {
         let entry = loadCurrentState()
         completion(entry)
     }
-
+    
     func getTimeline(in context: Context, completion: @escaping (Timeline<ComplicationEntry>) -> ()) {
         let currentEntry = loadCurrentState()
         var entries: [ComplicationEntry] = [currentEntry]
@@ -37,12 +37,12 @@ struct Provider: TimelineProvider {
             let now = Date()
             
             // 计算剩余的分钟数
-            let minutesRemaining = Int(currentEntry.progress * 100) / 5  // 假设总时间是25分钟
+            let minutesRemaining = Int((1.0 - currentEntry.progress) * 25)  // 假设25分钟
             
             // 为每一分钟生成一个条目
             for minute in 1...minutesRemaining {
                 if let futureDate = calendar.date(byAdding: .minute, value: minute, to: now) {
-                    let futureProgress = currentEntry.progress + (Double(minute) / 25.0)  // 25分钟为例
+                    let futureProgress = currentEntry.progress + (Double(minute) / 25.0)
                     let entry = ComplicationEntry(
                         date: futureDate,
                         phase: currentEntry.phase,
@@ -72,12 +72,9 @@ struct Provider: TimelineProvider {
         // 计算进度
         let progress = 1.0 - (Double(state.remainingTime) / Double(state.totalTime))
         
-        // 获取当前阶段的正确名称
-        let phaseName = state.phases[state.currentPhaseIndex].name.lowercased()
-        
         return ComplicationEntry(
             date: state.lastUpdateTime,
-            phase: phaseName,
+            phase: state.currentPhaseName.lowercased(),
             isRunning: state.timerRunning,
             progress: progress
         )
@@ -89,14 +86,23 @@ struct ComplicationView: View {
     var entry: ComplicationEntry
     
     var body: some View {
-        Gauge(value: entry.progress) {
+        ZStack {
+            // 进度圆环
+            Gauge(value: entry.progress) {
+                // 空视图作为标签
+            } currentValueLabel: {
+                // 空视图作为当前值标签
+            }
+            .gaugeStyle(.accessoryCircular)
+            
+            // 中心图标
             Image(systemName: phaseSymbol)
-                .foregroundColor(entry.isRunning ? .orange : .gray)
+                .font(.system(size: 15))
+                .foregroundStyle(entry.isRunning ? .orange : .gray)
         }
-        .gaugeStyle(.accessoryCircular)
         .widgetAccentable()
-        .widgetURL(URL(string: "pomoTAP://open")!)
         .containerBackground(.clear, for: .widget)
+        .widgetURL(URL(string: "pomoTAP://open")!)
     }
     
     private var phaseSymbol: String {
@@ -134,5 +140,6 @@ struct PomoTAPComplication: Widget {
 #Preview(as: .accessoryCircular) {
     PomoTAPComplication()
 } timeline: {
-    ComplicationEntry(date: .now, phase: "work", isRunning: true, progress: 0.0)
+    ComplicationEntry(date: .now, phase: "work", isRunning: true, progress: 0.3)
+    ComplicationEntry(date: .now, phase: "work", isRunning: true, progress: 0.7)
 }
