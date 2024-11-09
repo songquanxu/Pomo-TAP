@@ -470,6 +470,18 @@ class TimerModel: NSObject, ObservableObject {
             // 如果时间到达零，立即处理
             if newRemainingTime == 0 {
                 Task { @MainActor in
+                    // 先发送通知
+                    if !notificationSent {
+                        notificationDelegate?.sendNotification(
+                            for: .phaseCompleted,
+                            currentPhaseDuration: phases[currentPhaseIndex].duration / 60,
+                            nextPhaseDuration: phases[(currentPhaseIndex + 1) % phases.count].duration / 60
+                        )
+                        notificationSent = true
+                        
+                        // 等待通知发送完成
+                        try? await Task.sleep(nanoseconds: 500_000_000)
+                    }
                     stopTimer()
                     handlePhaseCompletion()
                 }
@@ -504,17 +516,17 @@ class TimerModel: NSObject, ObservableObject {
     private func handlePhaseCompletion() {
         Task { @MainActor in
             // 先发送通知
-            if !notificationSent {
-                notificationDelegate?.sendNotification(
-                    for: .phaseCompleted,
-                    currentPhaseDuration: phases[currentPhaseIndex].duration / 60,
-                    nextPhaseDuration: phases[(currentPhaseIndex + 1) % phases.count].duration / 60
-                )
-                notificationSent = true
+            // if !notificationSent {
+            //     notificationDelegate?.sendNotification(
+            //         for: .phaseCompleted,
+            //         currentPhaseDuration: phases[currentPhaseIndex].duration / 60,
+            //         nextPhaseDuration: phases[(currentPhaseIndex + 1) % phases.count].duration / 60
+            //     )
+            //     notificationSent = true
                 
-                // 等待通知发送完成
-                try? await Task.sleep(nanoseconds: 500_000_000)
-            }
+            //     // 等待通知发送完成
+            //     try? await Task.sleep(nanoseconds: 500_000_000)
+            // }
             
             // 移动到下一阶段
             await moveToNextPhase(autoStart: false, skip: false)
