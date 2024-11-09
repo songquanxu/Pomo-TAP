@@ -8,6 +8,7 @@ struct SharedTimerState: Codable {
     let lastUpdateTime: Date
     let totalTime: Int
     let phases: [PhaseInfo]
+    let lastUpdateProgress: Double
     
     static let userDefaultsKey = "SharedTimerState"
     static let suiteName = "group.com.songquan.pomoTAP.shared"

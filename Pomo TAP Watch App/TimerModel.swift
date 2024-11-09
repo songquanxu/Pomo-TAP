@@ -131,6 +131,9 @@ class TimerModel: NSObject, ObservableObject {
         }
     }
 
+    // 添加这个属性来跟踪上一次的进度
+    private var lastProgress: Double = 0.0
+
     // 初始化方法，设置初始阶段和状态
     override init() {
         let initialPhases = [
@@ -337,7 +340,7 @@ class TimerModel: NSObject, ObservableObject {
 
     // 移动到下一个阶段
     func moveToNextPhase(autoStart: Bool, skip: Bool = false) async {
-        // 重置通知状态
+        // 重置通知状
         notificationSent = false
         
         startTransitionAnimation()
@@ -762,7 +765,7 @@ class TimerModel: NSObject, ObservableObject {
         // 安排后台刷新
         scheduleBackgroundRefresh()
         
-        logger.info("应用已进入后台模式，已完成必要置")
+        logger.info("应用已进入后台���式，已完成必要置")
     }
 
     // 安排后台刷新
@@ -839,7 +842,7 @@ class TimerModel: NSObject, ObservableObject {
                 // 设置当前阶段状态
                 phaseCompletionStatus[currentPhaseIndex] = .current
                 
-                // 如果计时器在运行，恢复计时器状态
+                // 如果计器在运行，恢复计时器状态
                 if timerRunning {
                     await startTimer()
                 }
@@ -897,7 +900,7 @@ class TimerModel: NSObject, ObservableObject {
                 // 当前阶段标记为进行中
                 self.phaseCompletionStatus[index] = .current
             } else {
-                // 后续阶��标记为未开始
+                // 后续阶标记为未开始
                 self.phaseCompletionStatus[index] = .notStarted
             }
         }
@@ -1008,7 +1011,6 @@ class TimerModel: NSObject, ObservableObject {
 
     // 添加以下方法
     private func updateSharedState() {
-        // 转换阶段信息
         let phaseInfos = phases.map { phase in
             PhaseInfo(
                 duration: phase.duration,
@@ -1017,6 +1019,12 @@ class TimerModel: NSObject, ObservableObject {
             )
         }
         
+        // 计算当前进度
+        let currentProgress = timerRunning ? (1.0 - Double(remainingTime) / Double(totalTime)) : lastProgress
+        
+        // 更新 lastProgress
+        lastProgress = currentProgress
+        
         let sharedState = SharedTimerState(
             currentPhaseIndex: currentPhaseIndex,
             remainingTime: remainingTime,
@@ -1024,13 +1032,14 @@ class TimerModel: NSObject, ObservableObject {
             currentPhaseName: currentPhaseName,
             lastUpdateTime: Date(),
             totalTime: totalTime,
-            phases: phaseInfos
+            phases: phaseInfos,
+            lastUpdateProgress: currentProgress
         )
         
         if let data = try? JSONEncoder().encode(sharedState),
            let userDefaults = UserDefaults(suiteName: SharedTimerState.suiteName) {
             userDefaults.set(data, forKey: SharedTimerState.userDefaultsKey)
-            userDefaults.synchronize()  // 确保立即写入
+            userDefaults.synchronize()
         }
         
         // 通知 Widget 更新

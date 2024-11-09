@@ -14,12 +14,13 @@ struct ComplicationEntry: TimelineEntry {
     let phase: String
     let isRunning: Bool
     let progress: Double
+    let totalMinutes: Int
 }
 
 // 提供数据的 Provider
 struct Provider: TimelineProvider {
     func placeholder(in context: Context) -> ComplicationEntry {
-        ComplicationEntry(date: Date(), phase: "work", isRunning: false, progress: 0.0)
+        ComplicationEntry(date: Date(), phase: "work", isRunning: false, progress: 0.0, totalMinutes: 25)
     }
 
     func getSnapshot(in context: Context, completion: @escaping (ComplicationEntry) -> ()) {
@@ -32,32 +33,29 @@ struct Provider: TimelineProvider {
         var entries: [ComplicationEntry] = [currentEntry]
         
         if currentEntry.isRunning {
-            // 如果计时器在运行，生成更精确的时间线
+            // 如果计时器在运行，每分钟更新一次
             let calendar = Calendar.current
             let now = Date()
             
-            // 计算剩余的分钟数
-            let minutesRemaining = Int((1.0 - currentEntry.progress) * 25)  // 假设25分钟
-            
-            // 为每一分钟生成一个条目
-            for minute in 1...minutesRemaining {
+            // 生成未来5分钟的时间点
+            for minute in 1...5 {
                 if let futureDate = calendar.date(byAdding: .minute, value: minute, to: now) {
-                    let futureProgress = currentEntry.progress + (Double(minute) / 25.0)
+                    let futureProgress = min(currentEntry.progress + (Double(minute) / Double(currentEntry.totalMinutes)), 1.0)
                     let entry = ComplicationEntry(
                         date: futureDate,
                         phase: currentEntry.phase,
                         isRunning: true,
-                        progress: min(futureProgress, 1.0)
+                        progress: futureProgress,
+                        totalMinutes: currentEntry.totalMinutes
                     )
                     entries.append(entry)
                 }
             }
             
-            // 使用 atEnd 策略，让系统在最后一个条目后请求新的时间线
             completion(Timeline(entries: entries, policy: .atEnd))
         } else {
-            // 如果计时器暂停，5分钟后更新
-            completion(Timeline(entries: [currentEntry], policy: .after(Date().addingTimeInterval(300))))
+            // 如果计时器暂停，保持当前状态
+            completion(Timeline(entries: [currentEntry], policy: .never))
         }
     }
     
@@ -66,17 +64,15 @@ struct Provider: TimelineProvider {
               let data = userDefaults.data(forKey: SharedTimerState.userDefaultsKey),
               let state = try? JSONDecoder().decode(SharedTimerState.self, from: data)
         else {
-            return ComplicationEntry(date: Date(), phase: "work", isRunning: false, progress: 0.0)
+            return ComplicationEntry(date: Date(), phase: "work", isRunning: false, progress: 0.0, totalMinutes: 25)
         }
-        
-        // 计算进度
-        let progress = 1.0 - (Double(state.remainingTime) / Double(state.totalTime))
         
         return ComplicationEntry(
             date: state.lastUpdateTime,
             phase: state.currentPhaseName.lowercased(),
             isRunning: state.timerRunning,
-            progress: progress
+            progress: state.lastUpdateProgress,
+            totalMinutes: state.totalTime / 60
         )
     }
 }
@@ -90,10 +86,19 @@ struct ComplicationView: View {
             // 进度圆环
             Gauge(value: entry.progress) {
                 // 空视图作为标签
+                EmptyView()
             } currentValueLabel: {
                 // 空视图作为当前值标签
+                EmptyView()
+            } minimumValueLabel: {
+                // 空视图作为最小值标签
+                EmptyView()
+            } maximumValueLabel: {
+                // 空视图作为最大值标签
+                EmptyView()
             }
-            .gaugeStyle(.accessoryCircular)
+            .gaugeStyle(.circular)
+            .tint(entry.isRunning ? .orange : .gray)
             
             // 中心图标
             Image(systemName: phaseSymbol)
@@ -140,6 +145,6 @@ struct PomoTAPComplication: Widget {
 #Preview(as: .accessoryCircular) {
     PomoTAPComplication()
 } timeline: {
-    ComplicationEntry(date: .now, phase: "work", isRunning: true, progress: 0.3)
-    ComplicationEntry(date: .now, phase: "work", isRunning: true, progress: 0.7)
+    ComplicationEntry(date: .now, phase: "work", isRunning: true, progress: 0.3, totalMinutes: 25)
+    ComplicationEntry(date: .now, phase: "work", isRunning: true, progress: 0.7, totalMinutes: 25)
 }
