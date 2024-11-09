@@ -12,25 +12,29 @@ import UserNotifications
 struct ContentView: View {
     @EnvironmentObject var timerModel: TimerModel
     @Environment(\.scenePhase) private var scenePhase
-    @Environment(\.isLuminanceReduced) private var isLuminanceReduced
+    @StateObject private var wristStateManager = WristStateManager()
     @EnvironmentObject var notificationDelegate: NotificationDelegate
     
     var body: some View {
         GeometryReader { geometry in
             ZStack {
                 VStack(spacing: 0) {
-                    topDateTimeView(geometry: geometry)
-                        .padding(.top, 25.0)
-                        .frame(height: geometry.size.height * 0.15)
-                        .padding(.leading, 6.0)
+                    if wristStateManager.isWristRaised {
+                        topDateTimeView(geometry: geometry)
+                            .padding(.top, 25.0)
+                            .frame(height: geometry.size.height * 0.15)
+                            .padding(.leading, 6.0)
+                    }
                     
                     timerRingView(geometry: geometry)
                         .frame(height: geometry.size.height * 0.7)
                     
-                    bottomControlView
-                        .padding(.bottom, 20)
-                        .frame(height: geometry.size.height * 0.15)
-                        .padding(.horizontal, 1.0)
+                    if wristStateManager.isWristRaised {
+                        bottomControlView
+                            .padding(.bottom, 20)
+                            .frame(height: geometry.size.height * 0.15)
+                            .padding(.horizontal, 1.0)
+                    }
                 }
             }
             .frame(width: geometry.size.width, height: geometry.size.height)
@@ -40,7 +44,6 @@ struct ContentView: View {
             Task {
                 switch newPhase {
                 case .active:
-                    // 从后台恢复时，确保状态同步
                     if oldPhase == .background {
                         await timerModel.appBecameActive()
                     }
@@ -52,7 +55,6 @@ struct ContentView: View {
             }
         }
         .task {
-            // 首次加载时同步状态
             await timerModel.appBecameActive()
         }
     }
@@ -71,7 +73,7 @@ struct ContentView: View {
     
     private func timerRingView(geometry: GeometryProxy) -> some View {
         ZStack {
-            if !isLuminanceReduced {
+            if wristStateManager.isWristRaised {
                 timerRingBackground(geometry: geometry)
                 timerRingProgress(geometry: geometry)
             }
@@ -147,7 +149,7 @@ struct ContentView: View {
     
     private func timerContent(geometry: GeometryProxy) -> some View {
         VStack(spacing: 5) {
-            if !isLuminanceReduced {
+            if wristStateManager.isWristRaised {
                 HStack() {
                     Image(systemName: "medal.fill")
                         .foregroundColor(timerModel.hasSkippedInCurrentCycle ? .green : .orange)
@@ -161,7 +163,7 @@ struct ContentView: View {
                 .font(.system(size: geometry.size.width * 0.2, weight: .bold, design: .rounded))
                 .allowsHitTesting(false)
             
-            if !isLuminanceReduced {
+            if wristStateManager.isWristRaised {
                 phaseIndicators(geometry: geometry)
             }
         }
@@ -259,7 +261,7 @@ struct ContentView: View {
         formatter.unitsStyle = .positional
         formatter.zeroFormattingBehavior = .pad
         
-        if isLuminanceReduced {
+        if !wristStateManager.isWristRaised {
             if time < 60 {  // 如果剩余时间少于1分钟
                 return formatter.string(from: TimeInterval(time)) ?? ""
             } else {
@@ -315,5 +317,42 @@ extension View {
         } else {
             self
         }
+    }
+}
+
+// 修改抬腕状态管理器
+class WristStateManager: NSObject, ObservableObject {
+    @Published var isWristRaised = true
+    
+    override init() {
+        super.init()
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(willActivate),
+            name: NSNotification.Name("WKApplicationWillEnterForeground"),
+            object: nil
+        )
+        NotificationCenter.default.addObserver(
+            self,
+            selector: #selector(didDeactivate),
+            name: NSNotification.Name("WKApplicationDidEnterBackground"),
+            object: nil
+        )
+    }
+    
+    @objc private func willActivate() {
+        DispatchQueue.main.async {
+            self.isWristRaised = true
+        }
+    }
+    
+    @objc private func didDeactivate() {
+        DispatchQueue.main.async {
+            self.isWristRaised = false
+        }
+    }
+    
+    deinit {
+        NotificationCenter.default.removeObserver(self)
     }
 }

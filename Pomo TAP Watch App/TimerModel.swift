@@ -406,7 +406,7 @@ class TimerModel: NSObject, ObservableObject {
             playSound(.stop)
             stopTimer()
             
-            // 等待一小段时间停止会话
+            // 等待一小段时间止会话
             try? await Task.sleep(nanoseconds: 200_000_000) // 0.2秒
             stopExtendedSession()
         } else {
@@ -467,20 +467,6 @@ class TimerModel: NSObject, ObservableObject {
             // 如果时间到达零，立即处理
             if newRemainingTime == 0 {
                 Task { @MainActor in
-                    // 先发送通知
-                    if !notificationSent {
-                        notificationDelegate?.sendNotification(
-                            for: .phaseCompleted,
-                            currentPhaseDuration: phases[currentPhaseIndex].duration / 60,
-                            nextPhaseDuration: phases[(currentPhaseIndex + 1) % phases.count].duration / 60
-                        )
-                        notificationSent = true
-                        
-                        // 等待通知发送完成
-                        try? await Task.sleep(nanoseconds: 500_000_000)
-                    }
-                    
-                    // 停止计时器并处理完成事件
                     stopTimer()
                     handlePhaseCompletion()
                 }
@@ -514,6 +500,19 @@ class TimerModel: NSObject, ObservableObject {
     // 处理阶段完成##
     private func handlePhaseCompletion() {
         Task { @MainActor in
+            // 先发送通知
+            if !notificationSent {
+                notificationDelegate?.sendNotification(
+                    for: .phaseCompleted,
+                    currentPhaseDuration: phases[currentPhaseIndex].duration / 60,
+                    nextPhaseDuration: phases[(currentPhaseIndex + 1) % phases.count].duration / 60
+                )
+                notificationSent = true
+                
+                // 等待通知发送完成
+                try? await Task.sleep(nanoseconds: 500_000_000)
+            }
+            
             // 移动到下一阶段
             await moveToNextPhase(autoStart: false, skip: false)
             
@@ -898,7 +897,7 @@ class TimerModel: NSObject, ObservableObject {
                 // 当前阶段标记为进行中
                 self.phaseCompletionStatus[index] = .current
             } else {
-                // 后续阶段标记为未开始
+                // 后续阶��标记为未开始
                 self.phaseCompletionStatus[index] = .notStarted
             }
         }
@@ -916,9 +915,8 @@ class TimerModel: NSObject, ObservableObject {
         self.logger.debug("阶段状态已更新并同步到UI: \(self.phaseCompletionStatus)")
     }
 
-    // 添加状态同步方法
+    // 修改 synchronizeTimerState 方法
     private func synchronizeTimerState() {
-        // 确保计时器状态与实际时间同步
         if timerRunning {
             guard let endTime = endTime else {
                 stopTimer()
@@ -929,7 +927,7 @@ class TimerModel: NSObject, ObservableObject {
             if now >= endTime {
                 Task { @MainActor in
                     remainingTime = 0
-                    await handlePhaseCompletion()
+                    handlePhaseCompletion()
                 }
             } else {
                 remainingTime = Int(endTime.timeIntervalSince(now))
@@ -937,7 +935,6 @@ class TimerModel: NSObject, ObservableObject {
             }
         }
         
-        // 检查并更新完成的周期
         checkAndUpdateCompletedCycles()
     }
 
@@ -968,7 +965,7 @@ class TimerModel: NSObject, ObservableObject {
             if now >= endTime && timerRunning {
                 // 如果时间已到但状态未更新，强制更新
                 remainingTime = 0
-                await handlePhaseCompletion()
+                handlePhaseCompletion()
             }
         }
     }
@@ -995,9 +992,10 @@ class TimerModel: NSObject, ObservableObject {
     // 添加清理会话的辅助方法
     private func cleanupSession() async {
         if let session = extendedSession {
-            await MainActor.run {
+            // 直接在主线程执行
+            DispatchQueue.main.async { [weak self] in
                 session.invalidate()
-                extendedSession = nil
+                self?.extendedSession = nil
             }
         }
     }
@@ -1042,11 +1040,13 @@ class TimerModel: NSObject, ObservableObject {
     // 添加新方法用于安排下一次后台刷新
     private func scheduleNextBackgroundRefresh(after interval: TimeInterval) {
         let refreshDate = Date().addingTimeInterval(interval)
-        WKApplication.shared().scheduleBackgroundRefresh(withPreferredDate: refreshDate, userInfo: nil) { [weak self] error in
-            if let error = error {
-                self?.logger.error("安排后台刷新失败: \(error.localizedDescription)")
-            } else {
-                self?.logger.info("后台刷新已安排，下次刷新时间: \(refreshDate)")
+        Task { @MainActor in  // 确保在主线程执行
+            WKApplication.shared().scheduleBackgroundRefresh(withPreferredDate: refreshDate, userInfo: nil) { [weak self] error in
+                if let error = error {
+                    self?.logger.error("安排后台刷新失败: \(error.localizedDescription)")
+                } else {
+                    self?.logger.info("后台刷新已成功安排，刷新时间: \(refreshDate)")
+                }
             }
         }
     }
