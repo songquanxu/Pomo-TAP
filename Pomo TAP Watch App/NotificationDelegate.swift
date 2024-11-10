@@ -97,15 +97,19 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                 switch event {
                 case .phaseCompleted:
                     content.title = NSLocalizedString("Great_Job", comment: "")
-                    let currentPhaseType = NSLocalizedString(
-                        getPhaseLocalizationKey(for: await timerModel.currentPhaseName),
+                    
+                    // 获取下一个阶段的名称，而不是当前阶段
+                    let nextPhaseIndex = (await timerModel.currentPhaseIndex + 1) % (await timerModel.phases.count)
+                    let nextPhaseName = await timerModel.phases[nextPhaseIndex].name
+                    let nextPhaseType = NSLocalizedString(
+                        getPhaseLocalizationKey(for: nextPhaseName),  // 使用下一阶段的名称
                         comment: "阶段类型：专注/短休息/长休息"
                     )
                     
                     content.body = String(
                         format: NSLocalizedString("Notification_Body", comment: "通知内容：%d = 持续时间（分钟），%@ = 阶段类型"),
                         nextPhaseDuration,
-                        currentPhaseType
+                        nextPhaseType
                     )
                     
                     content.categoryIdentifier = "PHASE_COMPLETED"
@@ -137,17 +141,17 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
         }
     }
     
-    // 添加辅助方法来获取阶段的本地化键
+    // 修改获取阶段本地化键的方法
     private func getPhaseLocalizationKey(for phaseName: String) -> String {
-        switch phaseName {
-        case "Work":
+        switch phaseName.lowercased() {
+        case "work", "专注":
             return "Phase_Work"
-        case "Short Break":
+        case "short break", "短休息":
             return "Phase_Short_Break"
-        case "Long Break":
+        case "long break", "长休息":
             return "Phase_Long_Break"
         default:
-            return "Phase_Work" // 默认返回专注阶段
+            return "Phase_Work"
         }
     }
     

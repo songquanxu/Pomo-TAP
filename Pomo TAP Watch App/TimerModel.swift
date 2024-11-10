@@ -195,7 +195,7 @@ class TimerModel: NSObject, ObservableObject {
             completedCycles: completedCycles
         )
         
-        // 使用 do-catch 理编码错误
+        // 使用 do-catch 处理编码错误
         do {
             let encoder = JSONEncoder()
             let data = try encoder.encode(state)
@@ -463,7 +463,7 @@ class TimerModel: NSObject, ObservableObject {
         timerRunning = true
         notificationSent = false
         
-        // 在启动计时器��安排通知
+        // 在启动计时器时安排通知
         notificationDelegate?.sendNotification(
             for: .phaseCompleted,
             currentPhaseDuration: remainingTime / 60,
