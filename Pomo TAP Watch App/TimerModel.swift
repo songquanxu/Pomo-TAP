@@ -475,17 +475,23 @@ class TimerModel: NSObject, ObservableObject {
 
     // 停止计时器
     private func stopTimer() {
+        // 检查计时器是否正在运行，如果不是，则直接返回
         guard timerRunning else { return }
         
         timer?.cancel()
+        // 将计时器设置为nil，以便释放资源
         timer = nil
+        // 将当前剩余时间保存为暂停的剩余时间
         pausedRemainingTime = remainingTime
+        // 停止扩展的会话
         stopExtendedSession()
+        // 将计时器运行状态设置为false
         timerRunning = false
         
-        // 移除待处理的通知
+        // 移除所有待处理的通知请求
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
         
+        // 记录日志，显示计时器已停止的信息
         logger.info("计时器已停止。剩余时间: \(self.remainingTime) 秒。")
     }
 

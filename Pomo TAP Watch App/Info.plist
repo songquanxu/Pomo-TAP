@@ -5,9 +5,20 @@
 	<key>CFBundleIdentifier</key>
 	<string>songquan.Pomo-TAP.watchkitapp</string>
 	<key>CFBundleName</key>
-	<string>Pomo TAP</string>
+	<string>$(PRODUCT_NAME)</string>
 	<key>CFBundleDisplayName</key>
-	<string>Pomo TAP</string>
+	<dict>
+		<key>en</key>
+		<string>Pomo TAP</string>
+		<key>zh-Hans</key>
+		<string>捏捏番茄</string>
+		<key>zh-Hant</key>
+		<string>捏捏番茄</string>
+		<key>ja</key>
+		<string>つまみトマト</string>
+		<key>ko</key>
+		<string>포모 탭</string>
+	</dict>
 	<key>CFBundleExecutable</key>
 	<string>$(EXECUTABLE_NAME)</string>
 	<key>CFBundlePackageType</key>
@@ -40,7 +51,7 @@
 	<key>WKAppBundleIdentifier</key>
 	<string>songquan.Pomo-TAP.watchkitapp</string>
 	<key>NSUserNotificationUsageDescription</key>
-	<string>请允许通知权限，以便提醒您番茄钟的完成状态。</string>
+	<string>NotificationPermissionDescription</string>
 	<key>WKBackgroundModes</key>
 	<array>
 		<string>self-care</string>
@@ -71,5 +82,13 @@
 	</array>
 	<key>WKRunsIndependentlyOfCompanionApp</key>
 	<true/>
+	<key>CFBundleLocalizations</key>
+	<array>
+		<string>en</string>
+		<string>zh_CN</string>
+		<string>zh_TW</string>
+		<string>ja</string>
+		<string>ko</string>
+	</array>
 </dict>
 </plist>

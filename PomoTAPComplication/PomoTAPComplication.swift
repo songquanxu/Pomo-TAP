@@ -59,56 +59,57 @@ struct Provider: TimelineProvider {
     func getTimeline(in context: Context, completion: @escaping (Timeline<ComplicationEntry>) -> ()) {
         do {
             let currentEntry = try loadCurrentState()
-            var entries: [ComplicationEntry] = [currentEntry]
             
-            if currentEntry.isRunning {
-                let calendar = Calendar.current
-                let now = Date()
-                let remainingSeconds = currentEntry.remainingTime
-                
-                // 每分钟生成一个时间点
-                for second in stride(from: 60, to: remainingSeconds, by: 60) {
-                    if let futureDate = calendar.date(byAdding: .second, value: second, to: now) {
-                        let futureRemainingTime = remainingSeconds - second
-                        let futureProgress = 1.0 - (Double(futureRemainingTime) / Double(currentEntry.totalMinutes * 60))
-                        
-                        let entry = ComplicationEntry(
-                            date: futureDate,
-                            phase: currentEntry.phase,
-                            isRunning: true,
-                            progress: min(futureProgress, 1.0),
-                            totalMinutes: currentEntry.totalMinutes,
-                            remainingTime: futureRemainingTime
-                        )
-                        entries.append(entry)
-                    }
-                }
-                
-                // 添加结束时间点
-                if let endDate = calendar.date(byAdding: .second, value: remainingSeconds, to: now) {
-                    let finalEntry = ComplicationEntry(
-                        date: endDate,
+            // 如果计时器没有运行，只返回当前状态
+            if !currentEntry.isRunning {
+                let timeline = Timeline(entries: [currentEntry], policy: .never)
+                completion(timeline)
+                return
+            }
+            
+            // 计时器运行时的逻辑
+            var entries: [ComplicationEntry] = [currentEntry]
+            let calendar = Calendar.current
+            let now = Date()
+            let remainingSeconds = currentEntry.remainingTime
+            
+            // 每分钟生成一个时间点
+            for second in stride(from: 60, to: remainingSeconds, by: 60) {
+                if let futureDate = calendar.date(byAdding: .second, value: second, to: now) {
+                    let futureRemainingTime = remainingSeconds - second
+                    let futureProgress = 1.0 - Double(futureRemainingTime) / Double(currentEntry.totalMinutes * 60)
+                    
+                    let entry = ComplicationEntry(
+                        date: futureDate,
                         phase: currentEntry.phase,
                         isRunning: true,
-                        progress: 1.0,
+                        progress: futureProgress,
                         totalMinutes: currentEntry.totalMinutes,
-                        remainingTime: 0
+                        remainingTime: futureRemainingTime
                     )
-                    entries.append(finalEntry)
+                    entries.append(entry)
                 }
-                
-                logger.info("生成时间线，条目数: \(entries.count)")
-                // 使用 atEnd 策略，确保时间线结束时更新
-                completion(Timeline(entries: entries, policy: .atEnd))
-            } else {
-                logger.debug("计时器未运行，使用单一条目时间线")
-                // 如果暂停，5分钟后检查一次
-                completion(Timeline(entries: [currentEntry], policy: .after(Date().addingTimeInterval(300))))
             }
+            
+            // 添加结束时间点
+            if let endDate = calendar.date(byAdding: .second, value: remainingSeconds, to: now) {
+                let finalEntry = ComplicationEntry(
+                    date: endDate,
+                    phase: currentEntry.phase,
+                    isRunning: false,
+                    progress: 1.0,
+                    totalMinutes: currentEntry.totalMinutes,
+                    remainingTime: 0
+                )
+                entries.append(finalEntry)
+            }
+            
+            let timeline = Timeline(entries: entries, policy: .atEnd)
+            completion(timeline)
+            
         } catch {
-            logger.error("加载状态失败: \(error.localizedDescription)")
-            // 提供默认条目作为回退方案
-            let fallbackEntry = ComplicationEntry(
+            // 发生错误时，返回一个基本的时间线
+            let entry = ComplicationEntry(
                 date: Date(),
                 phase: "work",
                 isRunning: false,
@@ -116,7 +117,8 @@ struct Provider: TimelineProvider {
                 totalMinutes: 25,
                 remainingTime: 1500
             )
-            completion(Timeline(entries: [fallbackEntry], policy: .after(Date().addingTimeInterval(300))))
+            let timeline = Timeline(entries: [entry], policy: .never)
+            completion(timeline)
         }
     }
     
