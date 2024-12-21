@@ -69,6 +69,42 @@
         }
       }
     },
+    "App_Name" : {
+      "comment" : "应用在不同语言环境下显示的名称",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pomo TAP"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "つまみトマト"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "포모 탭"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "捏捏番茄"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "捏捏番茄"
+          }
+        }
+      }
+    },
     "Great_Job" : {
       "comment" : "通知标题：完成一个番茄时显示",
       "localizations" : {
@@ -135,6 +171,42 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "剛剛又捏爆了一個小番茄，是否立即開始%d分鐘的%@？"
+          }
+        }
+      }
+    },
+    "NotificationPermissionDescription" : {
+      "comment" : "通知权限描述文本",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Please allow notifications to remind you when your Pomodoro is complete."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモドーロ完了時に通知するために、通知権限を許可してください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "뽀모도로 완료 시 알림을 받으려면 알림을 허용해 주세요."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "请允许通知权限，以便提醒您番茄钟的完成状态。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "請允許通知權限，以便提醒您番茄鐘的完成狀態。"
           }
         }
       }
@@ -423,76 +495,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "需要通知權限"
-          }
-        }
-      }
-    },
-    "App_Name" : {
-      "comment" : "应用在不同语言环境下显示的名称",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pomo TAP"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "つまみトマト"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "포모 탭"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "捏捏番茄"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "捏捏番茄"
-          }
-        }
-      }
-    },
-    "NotificationPermissionDescription" : {
-      "comment" : "通知权限描述文本",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Please allow notifications to remind you when your Pomodoro is complete."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ポモドーロ完了時に通知するために、通知権限を許可してください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "뽀모도로 완료 시 알림을 받으려면 알림을 허용해 주세요."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请允许通知权限，以便提醒您番茄钟的完成状态。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "請允許通知權限，以便提醒您番茄鐘的完成狀態。"
           }
         }
       }
