@@ -47,7 +47,7 @@ class TimerModel: NSObject, ObservableObject {
     @Published var phaseCompletionStatus: [PhaseStatus] = [] // 各阶段的完成状态
     @Published var totalTime: Int = 0 // 总时间
     @Published var notificationSent = false // 是否已发送通知
-    @Published var currentPhaseName: String = "" // 当前阶��名称
+    @Published var currentPhaseName: String = "" // 当前阶段名称
 
     var cyclePhaseCount = 0 // 当前周期的阶段计数
     var lastPhase = 0 // 上一个阶段索引
@@ -171,7 +171,7 @@ class TimerModel: NSObject, ObservableObject {
         self.resetPhaseCompletionStatus()
 
         // 确保共享 UserDefaults 可访问
-        if let userDefaults = UserDefaults(suiteName: SharedTimerState.suiteName) {
+        if UserDefaults(suiteName: SharedTimerState.suiteName) != nil {
             logger.info("成功访问共享 UserDefaults: \(SharedTimerState.suiteName)")
         } else {
             logger.error("无法访问共享 UserDefaults: \(SharedTimerState.suiteName)")
@@ -373,7 +373,7 @@ class TimerModel: NSObject, ObservableObject {
             phaseCompletionStatus[currentPhaseIndex] = .current
         }
         
-        // 更新剩余时���和总时间
+        // 更新剩余时间和总时间
         remainingTime = phases[currentPhaseIndex].duration
         totalTime = phases[currentPhaseIndex].duration
         // 增加周期计数
@@ -672,7 +672,7 @@ class TimerModel: NSObject, ObservableObject {
         if let currentSession = extendedSession {
             switch currentSession.state {
             case .running:
-                logger.debug("会话已��运行中")
+                logger.debug("会话已运行中")
                 return
             case .invalid:
                 cleanupSession()
