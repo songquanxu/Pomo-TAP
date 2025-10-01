@@ -34,4 +34,9 @@ struct PhaseInfo: Codable {
     let duration: Int
     let name: String
     let status: String
+}
+
+// MARK: - Notification Types
+enum NotificationEvent {
+    case phaseCompleted
 } 

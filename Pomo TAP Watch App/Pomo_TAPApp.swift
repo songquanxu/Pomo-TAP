@@ -12,13 +12,12 @@ import WatchKit
 
 @main
 struct Pomo_TAPApp: App {
-    // 使用共享容器来管理状态，确保单一数据源
-    @StateObject private var timerModel = TimerModelContainer.shared.timerModel
-    @StateObject private var notificationDelegate = TimerModelContainer.shared.notificationDelegate
-    
+    // 直接使用TimerModel
+    @StateObject private var timerModel = TimerModel()
+
     // 添加状态变量来控制权限提示
     @State private var showNotificationPermissionAlert = false
-    
+
     // 添加权限检查管理器
     private let permissionManager = PermissionManager()
     
@@ -26,7 +25,6 @@ struct Pomo_TAPApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(timerModel)
-                .environmentObject(notificationDelegate)
                 .onOpenURL { url in
                     // 处理从复杂功能打开应用的事件
                     if url.scheme == "pomoTAP" {
@@ -47,7 +45,8 @@ struct Pomo_TAPApp: App {
                     await permissionManager.checkNotificationPermission { status in
                         switch status {
                         case .notDetermined:
-                            notificationDelegate.requestNotificationPermission()
+                            // 使用TimerModel中的NotificationManager
+                            timerModel.requestNotificationPermission()
                         case .denied:
                             showNotificationPermissionAlert = true
                         default:

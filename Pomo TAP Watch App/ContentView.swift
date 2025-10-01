@@ -1,4 +1,4 @@
-//
+ //
 //  ContentView.swift
 //  pomoTAP Watch App
 //  pomoTAP Watch App
@@ -11,35 +11,24 @@ import UserNotifications
 
 struct ContentView: View {
     @EnvironmentObject var timerModel: TimerModel
-    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.scenePhase) var scenePhase
+    @Environment(\.isLuminanceReduced) var isLuminanceReduced
     @StateObject private var wristStateManager = WristStateManager()
-    @EnvironmentObject var notificationDelegate: NotificationDelegate
-    
+    @State private var showResetDialog = false
+    @State private var crownValue: Double = 0
+    @State private var selectedTab = 0  // 当前选中的标签页
+
     var body: some View {
-        GeometryReader { geometry in
-            ZStack {
-                VStack(spacing: 0) {
-                    if wristStateManager.isWristRaised {
-                        topDateTimeView(geometry: geometry)
-                            .padding(.top, 25.0)
-                            .frame(height: geometry.size.height * 0.15)
-                            .padding(.leading, 6.0)
-                    }
-                    
-                    timerRingView(geometry: geometry)
-                        .frame(height: geometry.size.height * 0.7)
-                    
-                    if wristStateManager.isWristRaised {
-                        bottomControlView
-                            .padding(.bottom, 20)
-                            .frame(height: geometry.size.height * 0.15)
-                            .padding(.horizontal, 1.0)
-                    }
-                }
-            }
-            .frame(width: geometry.size.width, height: geometry.size.height)
+        TabView(selection: $selectedTab) {
+            // 主计时器页面
+            timerPage()
+                .tag(0)
+
+            // 设置页面
+            SettingsView()
+                .tag(1)
         }
-        .edgesIgnoringSafeArea(.all)
+        .tabViewStyle(.page)
         .onChange(of: scenePhase) { oldPhase, newPhase in
             Task {
                 switch newPhase {
@@ -58,50 +47,147 @@ struct ContentView: View {
             await timerModel.appBecameActive()
         }
     }
-    
-    private func topDateTimeView(geometry: GeometryProxy) -> some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text(dateString().prefix(5)) // 只显示月日，如 "12/25"
-                .font(.system(size: geometry.size.width * 0.08))
-            Text(weekdayString().prefix(3)) // 只显示周几的缩写，如 "周一"
-                .font(.system(size: geometry.size.width * 0.06))
-                .foregroundColor(.gray)
-        }
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.leading, 10)
-    }
-    
-    private func timerRingView(geometry: GeometryProxy) -> some View {
-        ZStack {
-            if wristStateManager.isWristRaised {
-                timerRingBackground(geometry: geometry)
-                timerRingProgress(geometry: geometry)
+
+    private func timerPage() -> some View {
+        NavigationStack {
+            timerRingView()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .overlay(alignment: .topLeading) {
+                    if wristStateManager.isWristRaised && !isLuminanceReduced {
+                        topDateView()
+                            .padding(.leading, 12)
+                            .padding(.top, 12)
+                    }
+                }
+                .navigationBarHidden(true)
+            .toolbar {
+                ToolbarItemGroup(placement: .bottomBar) {
+                    // 左侧：重置按钮
+                    Button {
+                        showResetDialog = true
+                    } label: {
+                        Image(systemName: "arrow.counterclockwise")
+                    }
+                    .accessibilityLabel(Text(NSLocalizedString("Reset", comment: "")))
+
+                    Spacer()
+
+                    // 右侧：开始/暂停/停止按钮
+                    Button {
+                        Task {
+                            if timerModel.isInfiniteMode && timerModel.timerRunning {
+                                // 无限模式下运行时，点击停止
+                                timerModel.stopInfiniteTimer()
+                            } else {
+                                await timerModel.toggleTimer()
+                            }
+                        }
+                    } label: {
+                        Image(systemName: buttonIcon)
+                    }
+                    .accessibilityLabel(buttonAccessibilityLabel)
+                    .handGestureShortcut(.primaryAction)  // 设置为双指互点的默认按钮
+                }
             }
-            timerContent(geometry: geometry)
+            .confirmationDialog(
+                NSLocalizedString("Reset_Dialog_Title", comment: ""),
+                isPresented: $showResetDialog,
+                titleVisibility: .visible
+            ) {
+                Button(NSLocalizedString("Reset_Current_Phase", comment: ""), role: .destructive) {
+                    timerModel.resetCurrentPhase()
+                }
+                Button(NSLocalizedString("Reset_Cycle", comment: ""), role: .destructive) {
+                    timerModel.resetCycle()
+                }
+                Button(NSLocalizedString("Cancel", comment: ""), role: .cancel) {
+                    // 默认选项，不做任何操作
+                }
+            }
+            .edgesIgnoringSafeArea(.all)
+            .focusable(true)
+            .digitalCrownRotation(
+                $crownValue,
+                from: 0,
+                through: Double(timerModel.totalTime * 2),  // 允许延长到原时长的2倍
+                by: 60.0,  // 1 分钟（60 秒）
+                sensitivity: .medium,
+                isContinuous: false,
+                isHapticFeedbackEnabled: true
+            )
+            .onChange(of: crownValue) { oldValue, newValue in
+                guard !timerModel.timerRunning else { return }
+                let delta = Int(newValue - oldValue)
+                if delta != 0 {
+                    timerModel.adjustTime(by: delta)
+                    // 同步更新 crownValue 到实际的 totalTime
+                    crownValue = Double(timerModel.totalTime)
+                }
+            }
+            .onAppear {
+                crownValue = Double(timerModel.totalTime)
+            }
         }
-        .frame(width: geometry.size.width * 0.8, height: geometry.size.width * 0.8)
+    }
+
+    // 按钮图标
+    private var buttonIcon: String {
+        if timerModel.isInfiniteMode && timerModel.timerRunning {
+            return "stop.fill"  // 无限模式运行时显示停止按钮
+        } else {
+            return timerModel.timerRunning ? "pause.fill" : "play.fill"
+        }
+    }
+
+    // 按钮的无障碍标签
+    private var buttonAccessibilityLabel: Text {
+        if timerModel.isInfiniteMode && timerModel.timerRunning {
+            return Text(NSLocalizedString("Stop", comment: ""))
+        } else {
+            return timerModel.timerRunning ? Text(NSLocalizedString("Pause", comment: "")) : Text(NSLocalizedString("Start", comment: ""))
+        }
+    }
+
+    private func topDateView() -> some View {
+        VStack(alignment: .leading, spacing: 2) {
+            Text(dateString().prefix(5)) // 只显示月日，如 "12/25"
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+            Text(weekdayString().prefix(3)) // 只显示周几的缩写，如 "周一"
+                .font(.system(size: 12, weight: .regular, design: .rounded))
+                .foregroundColor(.secondary)
+        }
+    }
+
+    private func timerRingView() -> some View {
+        GeometryReader { geometry in
+            let ringSize = min(geometry.size.width, geometry.size.height) * 0.85
+            ZStack {
+                // AOD 状态下也显示背景环和进度环，但是降低亮度
+                if wristStateManager.isWristRaised || isLuminanceReduced {
+                    timerRingBackground(ringSize: ringSize)
+                    timerRingProgress(ringSize: ringSize)
+                }
+                timerContent()
+            }
+            .frame(width: ringSize, height: ringSize)
+            .position(x: geometry.size.width / 2, y: geometry.size.height / 2)
+        }
     }
     
-    private func timerRingBackground(geometry: GeometryProxy) -> some View {
-        let ringDiameter = geometry.size.width * 0.78
-        let strokeWidth = ringDiameter * 0.1
+    private func timerRingBackground(ringSize: CGFloat) -> some View {
+        let ringDiameter = ringSize * 0.9 // 背景环稍小一些
+        let strokeWidth = ringDiameter * 0.08
         return Circle()
             .stroke(lineWidth: strokeWidth)
             .opacity(0.2)
             .frame(width: ringDiameter, height: ringDiameter)
     }
     
-    private func timerRingProgress(geometry: GeometryProxy) -> some View {
-        let ringDiameter = geometry.size.width * 0.78
-        let strokeWidth = ringDiameter * 0.1
-        
+    private func timerRingProgress(ringSize: CGFloat) -> some View {
+        let ringDiameter = ringSize * 0.9
+        let strokeWidth = ringDiameter * 0.08
+
         return ZStack {
-            if timerModel.isInCooldownMode {
-                cooldownRing(diameter: ringDiameter, strokeWidth: strokeWidth)
-            }
-            if timerModel.isInDecisionMode {
-                decisionRing(diameter: ringDiameter, strokeWidth: strokeWidth)
-            }
             tomatoRing(diameter: ringDiameter, strokeWidth: strokeWidth)
         }
         .frame(width: ringDiameter, height: ringDiameter)
@@ -111,150 +197,85 @@ struct ContentView: View {
         let progress: CGFloat
         if timerModel.isTransitioning {
             progress = 1 - timerModel.transitionProgress
+        } else if timerModel.isInfiniteMode {
+            // 无限模式：显示完整圆环（100%）
+            progress = 1.0
         } else {
-            progress = CGFloat(timerModel.tomatoRingPosition.radians / (2 * .pi))
+            // 普通模式：直接使用剩余时间和总时间的比例来计算进度
+            progress = 1 - CGFloat(timerModel.remainingTime) / CGFloat(timerModel.totalTime)
         }
-        
+
+        // 无限模式下使用金色，否则使用橙色；AOD 状态下降低亮度
+        let ringColor: Color
+        if timerModel.isInfiniteMode {
+            ringColor = isLuminanceReduced ? Color.yellow.opacity(0.5) : Color.yellow
+        } else {
+            ringColor = isLuminanceReduced ? Color.orange.opacity(0.5) : Color.orange
+        }
+
         return Circle()
             .trim(from: 0.0, to: progress)
             .stroke(style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round, lineJoin: .round))
-            .foregroundColor(.orange)
+            .foregroundColor(ringColor)
             .rotationEffect(Angle(degrees: 270.0))
-            .animation(timerModel.isTransitioning ? .easeInOut(duration: 0.5) : .linear(duration: 1), value: progress)
+            .animation(timerModel.isTransitioning ? .easeInOut(duration: 0.5) : .none, value: progress)
     }
-    
-    private func decisionRing(diameter: CGFloat, strokeWidth: CGFloat) -> some View {
-        let startAngle = timerModel.decisionStartAngle.radians / (2 * .pi)
-        let endAngle = timerModel.decisionRingPosition.radians / (2 * .pi)
-        
-        return Circle()
-            .trim(from: startAngle, to: endAngle)  // 顺时针
-            .stroke(style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round, lineJoin: .round))
-            .foregroundColor(.green)  // 改为绿色
-            .rotationEffect(Angle(degrees: 270.0))
-            .opacity(0.5)
-    }
-    
-    private func cooldownRing(diameter: CGFloat, strokeWidth: CGFloat) -> some View {
-        let startAngle = timerModel.cooldownStartAngle.radians / (2 * .pi)
-        let currentAngle = timerModel.cooldownRingPosition.radians / (2 * .pi)
-        
-        return Circle()
-            .trim(from: startAngle, to: currentAngle)  // 逆时针缩短
-            .stroke(style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round, lineJoin: .round))
-            .foregroundColor(.blue)  // 改为蓝色
-            .rotationEffect(Angle(degrees: 270.0))
-            .opacity(0.5)
-    }
-    
-    private func timerContent(geometry: GeometryProxy) -> some View {
+
+    private func timerContent() -> some View {
         VStack(spacing: 5) {
-            if wristStateManager.isWristRaised {
+            // AOD 状态下隐藏奖牌
+            if wristStateManager.isWristRaised && !isLuminanceReduced {
                 HStack() {
                     Image(systemName: "medal.fill")
                         .foregroundColor(timerModel.hasSkippedInCurrentCycle ? .green : .orange)
                     Text("×\(timerModel.completedCycles)")
-                        .font(.system(size: geometry.size.width * 0.08))
+                        .font(.system(size: 14))
                         .foregroundColor(timerModel.hasSkippedInCurrentCycle ? .green : .orange)
                 }
             }
-            
-            Text(timeString(time: timerModel.remainingTime))
-                .font(.system(size: geometry.size.width * 0.2, weight: .bold, design: .rounded))
+
+            // 时间显示：无限模式下显示已过时间，普通模式显示剩余时间
+            Text(timeString(time: timerModel.isInfiniteMode ? timerModel.infiniteElapsedTime : timerModel.remainingTime))
+                .font(.system(size: 32, weight: .bold, design: .rounded))
+                .foregroundColor(timerModel.isInfiniteMode ? .yellow : .primary)
                 .allowsHitTesting(false)
-            
-            if wristStateManager.isWristRaised {
-                phaseIndicators(geometry: geometry)
+                .privacySensitive()  // 添加隐私保护
+
+            // AOD 状态下隐藏阶段指示器
+            if wristStateManager.isWristRaised && !isLuminanceReduced {
+                phaseIndicators()
             }
         }
     }
-    
-    private func phaseIndicators(geometry: GeometryProxy) -> some View {
+
+    private func phaseIndicators() -> some View {
         HStack(spacing: 5) {
             ForEach(0..<timerModel.phases.count, id: \.self) { index in
                 PhaseIndicator(
                     status: timerModel.phaseCompletionStatus[index],
                     duration: timerModel.phases[index].duration,
-                    isCycleCompleted: timerModel.currentCycleCompleted && index != 0
+                    adjustedDuration: index == timerModel.currentPhaseIndex ? timerModel.adjustedPhaseDuration : nil,
+                    isCycleCompleted: timerModel.currentCycleCompleted && index != 0,
+                    isInfiniteMode: timerModel.isInfiniteMode,
+                    infiniteElapsedTime: timerModel.infiniteElapsedTime
                 )
             }
         }
     }
-    
-    private var bottomControlView: some View {
-        HStack {
-            skipButton
-            Spacer()
-            playPauseResetButton
-        }
-        .padding(.horizontal, 10)
-    }
-    
-    private var skipButton: some View {
-        Image(systemName: "forward.fill")
-            .font(.system(size: 14))
-            .foregroundColor(.white)
-            .frame(width: 36, height: 36)
-            .background(
-                Circle()
-                    .fill(timerModel.isInCooldownMode ? Color.gray : (timerModel.isInDecisionMode ? Color.green : Color.gray.opacity(0.3)))
-            )
-            .clipShape(Circle())
-            .gesture(
-                DragGesture(minimumDistance: 0)
-                    .onChanged { _ in
-                        if !timerModel.isInDecisionMode && !timerModel.isInCooldownMode {
-                            timerModel.startDecisionMode()
-                        }
-                    }
-                    .onEnded { _ in
-                        if timerModel.isInDecisionMode {
-                            timerModel.cancelDecisionMode()
-                        }
-                    }
-            )
-            .disabled(timerModel.isInCooldownMode)
-            .opacity(timerModel.isInCooldownMode ? 0.5 : 1.0)
-            .accessibilityLabel(Text(NSLocalizedString("Skip", comment: "")))
-    }
-    
-    private var playPauseResetButton: some View {
-        Button(action: {
-            Task {
-                if timerModel.isInResetMode {
-                    timerModel.resetCycle()
-                } else {
-                    await timerModel.toggleTimer()
-                }
-            }
-        }) {
-            Image(systemName: timerModel.isInResetMode ? "arrow.counterclockwise" : (timerModel.timerRunning ? "pause.fill" : "play.fill"))
-                .font(.system(size: 14))
-                .foregroundColor(.white)
-                .frame(width: 36, height: 36)
-                .background(
-                    Circle()
-                        .fill(timerModel.isInResetMode ? Color.blue : Color.orange)
-                )
-        }
-        .handGestureShortcut(.primaryAction)
-        .buttonStyle(PlainButtonStyle())
-        .accessibilityLabel(timerModel.isInResetMode ? Text(NSLocalizedString("Reset", comment: "")) : (timerModel.timerRunning ? Text(NSLocalizedString("Pause", comment: "")) : Text(NSLocalizedString("Start", comment: ""))))
-    }
-    
+
     private func dateString() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = DateFormatter.dateFormat(fromTemplate: "MMMMd", options: 0, locale: Locale.current)
         return formatter.string(from: Date())
     }
-    
+
     private func weekdayString() -> String {
         let formatter = DateFormatter()
         formatter.dateFormat = "EEEE"
         formatter.locale = Locale.current
         return formatter.string(from: Date())
     }
-    
+
     private func timeString(time: Int) -> String {
         let formatter = DateComponentsFormatter()
         formatter.allowedUnits = [.minute, .second]
@@ -278,15 +299,55 @@ struct ContentView: View {
 struct PhaseIndicator: View {
     let status: PhaseStatus
     let duration: Int
+    let adjustedDuration: Int?  // 调整后的时长（仅当前阶段）
     let isCycleCompleted: Bool
-    
+    let isInfiniteMode: Bool  // 是否处于无限模式
+    let infiniteElapsedTime: Int  // 无限模式下的已过时间
+
     var body: some View {
-        Text("\(duration / 60)")
-            .font(.system(size: 14, weight: .medium))
+        Text(displayText)
+            .font(.caption)
             .foregroundColor(color)
     }
-    
+
+    // 计算要显示的文本
+    private var displayText: String {
+        // 如果是无限模式且是当前阶段，显示金色无穷符号或实际时长
+        if isInfiniteMode && status == .current {
+            // 如果已过时间为0（还未开始计时），显示∞
+            if infiniteElapsedTime == 0 {
+                return "∞"
+            }
+            // 如果已经开始计时，显示实际时长
+            let minutes = infiniteElapsedTime / 60
+            if minutes > 99 {
+                // 超过99分钟，显示小时数（向上取整）
+                let hours = (minutes + 59) / 60  // 向上取整
+                return "\(hours)h"
+            }
+            return "\(minutes)"
+        }
+
+        // 普通模式：显示分钟数
+        return "\(displayDuration)"
+    }
+
+    // 计算要显示的时长（分钟数）
+    private var displayDuration: Int {
+        // 如果有调整后的时长，优先显示调整后的值
+        if let adjusted = adjustedDuration {
+            return adjusted / 60
+        }
+        // 否则显示原始时长
+        return duration / 60
+    }
+
     private var color: Color {
+        // 无限模式下当前阶段显示金色
+        if isInfiniteMode && status == .current {
+            return .yellow
+        }
+
         if isCycleCompleted {
             return .gray
         }
