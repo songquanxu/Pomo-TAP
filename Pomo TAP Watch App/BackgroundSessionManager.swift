@@ -1,5 +1,6 @@
 import SwiftUI
 @preconcurrency import WatchKit
+@preconcurrency import Dispatch
 import os
 
 // MARK: - 后台会话管理
@@ -61,31 +62,31 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
 
         do {
             try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                // 设置超时机制
-                let timeoutWorkItem = DispatchWorkItem {
-                    guard let self = self else { return }
+                // 启动会话
+                session.start()
+
+                // 使用 Task 实现超时和状态监听
+                Task { @MainActor in
+                    let startTime = Date()
+                    let timeoutDuration: TimeInterval = 5.0
+
+                    while Date().timeIntervalSince(startTime) < timeoutDuration {
+                        if session.state == .running {
+                            continuation.resume()
+                            return
+                        } else if session.state == .invalid {
+                            continuation.resume(throwing: NSError(domain: "BackgroundSessionManager", code: -2, userInfo: [NSLocalizedDescriptionKey: "Session became invalid"]))
+                            return
+                        }
+
+                        try? await Task.sleep(nanoseconds: 1_000_000_000) // 1秒检查间隔
+                    }
+
+                    // 超时处理
                     if self.sessionState == .starting {
                         self.logger.error("会话启动超时")
                         self.sessionState = .invalid
                         continuation.resume(throwing: NSError(domain: "BackgroundSessionManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Session start timeout"]))
-                    }
-                }
-
-                DispatchQueue.main.asyncAfter(deadline: .now() + 5.0, execute: timeoutWorkItem)
-
-                // 启动会话
-                session.start()
-
-                // 监听状态变化 - 降低频率以节省电池
-                let _ = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { timer in
-                    if session.state == .running {
-                        timer.invalidate()
-                        timeoutWorkItem.cancel()
-                        continuation.resume()
-                    } else if session.state == .invalid {
-                        timer.invalidate()
-                        timeoutWorkItem.cancel()
-                        continuation.resume(throwing: NSError(domain: "BackgroundSessionManager", code: -2, userInfo: [NSLocalizedDescriptionKey: "Session became invalid"]))
                     }
                 }
             }
@@ -119,8 +120,6 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
             sessionState = .stopping
 
             DispatchQueue.main.async {
-                guard let self = self else { return }
-
                 if currentSession === self.extendedSession && currentSession.state == .running {
                     self.extendedSession = nil
                     self.sessionState = .none
@@ -146,7 +145,6 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
         default:
             logger.warning("未知的会话状态: \(currentSession.state.rawValue)")
             DispatchQueue.main.async {
-                guard let self = self else { return }
                 self.extendedSession = nil
                 self.sessionState = .none
                 currentSession.invalidate()

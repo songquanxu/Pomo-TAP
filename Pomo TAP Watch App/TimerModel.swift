@@ -2,8 +2,6 @@ import SwiftUI
 import WatchKit
 import Combine
 import UserNotifications
-import AVFoundation
-import AudioToolbox
 import os
 import WidgetKit
 
@@ -263,18 +261,20 @@ class TimerModel: NSObject, ObservableObject {
         timerCore.onPhaseCompleted = { [weak self] in
             Task { @MainActor [weak self] in
                 guard let self = self else { return }
-                await self.handlePhaseCompletion()
+                self.handlePhaseCompletion()
             }
         }
     }
 
-    private func handlePhaseCompletion() async {
+    private func handlePhaseCompletion() {
         // 检查应用是否在前台
-        let appState = await WKExtension.shared().applicationState
+        let appState = WKExtension.shared().applicationState
 
         if appState == .active {
             // 应用在前台，播放自定义提醒
-            await playInAppAlert()
+            Task {
+                await playInAppAlert()
+            }
         }
 
         // 无论前台还是后台，都记录日志
@@ -282,18 +282,21 @@ class TimerModel: NSObject, ObservableObject {
     }
 
     private func playInAppAlert() async {
-        // 连续播放触觉反馈
-        for i in 0..<3 {
-            WKInterfaceDevice.current().play(.notification)
-            if i < 2 {
-                try? await Task.sleep(nanoseconds: 500_000_000) // 0.5秒
-            }
-        }
+        // watchOS 只支持触觉反馈，不支持自定义系统音效
+        // 使用增强的触觉反馈模式来创建独特的提醒
 
-        // 播放系统提示音（watchOS使用系统音效）
-        AudioServicesPlaySystemSound(1057) // Tock sound
+        // 第一组：快速双击
+        WKInterfaceDevice.current().play(.notification)
+        try? await Task.sleep(nanoseconds: 200_000_000) // 0.2秒
+        WKInterfaceDevice.current().play(.notification)
 
-        logger.info("应用内提醒已播放")
+        // 短暂停顿
+        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5秒
+
+        // 第二组：单击（强调）
+        WKInterfaceDevice.current().play(.success)
+
+        logger.info("应用内提醒已播放（仅触觉反馈）")
     }
 
     private func initializeState() {

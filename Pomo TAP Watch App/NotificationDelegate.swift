@@ -99,10 +99,10 @@ class NotificationDelegate: NSObject, UNUserNotificationCenterDelegate, Observab
                 switch event {
                 case .phaseCompleted:
                     content.title = NSLocalizedString("Great_Job", comment: "")
-                    
+
                     // 获取下一个阶段的名称，而不是当前阶段
-                    let nextPhaseIndex = (await timerModel.currentPhaseIndex + 1) % (await timerModel.phases.count)
-                    let nextPhaseName = await timerModel.phases[nextPhaseIndex].name
+                    let nextPhaseIndex = (timerModel.currentPhaseIndex + 1) % timerModel.phases.count
+                    let nextPhaseName = timerModel.phases[nextPhaseIndex].name
                     let nextPhaseType = NSLocalizedString(
                         getPhaseLocalizationKey(for: nextPhaseName),  // 使用下一阶段的名称
                         comment: "阶段类型：专注/短休息/长休息"
