@@ -64,7 +64,24 @@ class TimerCore: NSObject, ObservableObject {
     // MARK: - Initialization
     override init() {
         super.init()
+        
+        // 监听更新频率变化，在 AOD 状态切换时重新调度计时器
+        $updateFrequency
+            .dropFirst()  // 跳过初始值
+            .sink { [weak self] newFrequency in
+                Task { @MainActor [weak self] in
+                    guard let self = self, self.timerRunning else { return }
+                    
+                    // 计时器正在运行时，重新调度以应用新的频率设置
+                    self.logger.info("AOD状态变化，重新调度计时器: \(newFrequency)")
+                    self.rescheduleTimer()
+                }
+            }
+            .store(in: &cancellables)
     }
+    
+    // MARK: - Private Properties for Combine
+    private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Public Methods
     func startTimer() async {
@@ -131,6 +148,20 @@ class TimerCore: NSObject, ObservableObject {
 
     func clearPausedState() {
         pausedRemainingTime = nil
+    }
+    
+    // 重新调度计时器（在更新频率变化时使用）
+    private func rescheduleTimer() {
+        guard let timer = timer, timerRunning else { return }
+        
+        // 重新调度现有的计时器，应用新的间隔和 leeway
+        timer.schedule(
+            deadline: .now(),
+            repeating: updateFrequency.interval,
+            leeway: updateFrequency.leeway
+        )
+        
+        logger.debug("计时器已重新调度: \(self.updateFrequency.description)")
     }
 
     func enterFlowCountUp() {
