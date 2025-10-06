@@ -11,8 +11,9 @@ class TimerCore: NSObject, ObservableObject {
     @Published var remainingTime: Int = 0
     @Published var timerRunning: Bool = false
     @Published var totalTime: Int = 0
-    @Published var isInfiniteMode: Bool = false  // 无限计时模式
-    @Published var infiniteElapsedTime: Int = 0  // 无限模式下的已过时间
+    @Published var isInfiniteMode: Bool = false  // 心流模式开关
+    @Published var infiniteElapsedTime: Int = 0  // 心流模式下的已过时间
+    @Published var isInFlowCountUp: Bool = false  // 当前是否处于心流正计时状态
 
     // MARK: - Private Properties
     private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "TimerCore")
@@ -23,6 +24,10 @@ class TimerCore: NSObject, ObservableObject {
 
     // MARK: - Phase Completion Callback
     var onPhaseCompleted: (() -> Void)?
+
+    // MARK: - Periodic Update Callback (for Widget sync)
+    var onPeriodicUpdate: (() -> Void)?
+    private var lastPeriodicUpdateTime: Date?
 
     // MARK: - Initialization
     override init() {
@@ -87,24 +92,55 @@ class TimerCore: NSObject, ObservableObject {
         pausedRemainingTime = nil
     }
 
+    func clearPausedState() {
+        pausedRemainingTime = nil
+    }
+
+    func enterFlowCountUp() {
+        // 进入心流正计时模式
+        isInFlowCountUp = true
+        infiniteElapsedTime = 0
+        startTime = Date()
+        endTime = nil
+        logger.info("进入心流正计时模式")
+    }
+
+    func exitFlowCountUp() -> Int {
+        // 退出心流正计时模式，返回已过时间
+        isInFlowCountUp = false
+        let elapsed = infiniteElapsedTime
+        infiniteElapsedTime = 0
+        logger.info("退出心流正计时模式，已过时间: \(elapsed) 秒")
+        return elapsed
+    }
+
     // MARK: - Private Methods
     private func updateTimer() {
         guard timerRunning else { return }
 
-        if isInfiniteMode {
-            // 无限模式：正计时
+        // 检查是否需要触发定期更新（每分钟一次）
+        let now = Date()
+        if let lastUpdate = lastPeriodicUpdateTime {
+            if now.timeIntervalSince(lastUpdate) >= 60 {
+                lastPeriodicUpdateTime = now
+                onPeriodicUpdate?()
+            }
+        } else {
+            lastPeriodicUpdateTime = now
+        }
+
+        if isInFlowCountUp {
+            // 心流正计时：正计时
             guard let startTime = startTime else { return }
-            let now = Date()
             let elapsed = Int(now.timeIntervalSince(startTime))
 
             if elapsed != infiniteElapsedTime {
                 infiniteElapsedTime = elapsed
-                logger.debug("无限模式已过时间: \(elapsed) 秒")
+                logger.debug("心流正计时已过时间: \(elapsed) 秒")
             }
         } else {
             // 普通模式：倒计时
             guard let endTime = endTime else { return }
-            let now = Date()
             let newRemainingTime = max(Int(ceil(endTime.timeIntervalSince(now))), 0)
 
             // 只有当时间发生变化时才更新

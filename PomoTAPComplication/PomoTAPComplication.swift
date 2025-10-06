@@ -209,13 +209,13 @@ struct Provider: TimelineProvider {
         }
 
         guard let data = userDefaults.data(forKey: SharedTimerState.userDefaultsKey) else {
-            logger.error("未找到共享状态数据，key: \(SharedTimerState.userDefaultsKey)")
+            logger.warning("未找到共享状态数据，key: \(SharedTimerState.userDefaultsKey)")
             throw ComplicationError.noDataAvailable
         }
 
         do {
             let state = try JSONDecoder().decode(SharedTimerState.self, from: data)
-            logger.debug("成功加载状态: phase=\(state.currentPhaseName), running=\(state.timerRunning)")
+            logger.info("✅ Widget成功加载状态: phase=\(state.currentPhaseName), running=\(state.timerRunning), remaining=\(state.remainingTime)秒")
 
             // 计算相关性分数
             let relevance = calculateRelevance(
@@ -260,7 +260,6 @@ enum ComplicationError: Error {
 }
 
 // 复杂功能视图 - Circular
-@available(watchOS 11.5, *)
 struct CircularComplicationView: View {
     var entry: ComplicationEntry
 
@@ -268,25 +267,24 @@ struct CircularComplicationView: View {
         ZStack {
             // 背景圆环（灰色）
             Circle()
-                .stroke(lineWidth: 4)
+                .stroke(lineWidth: 2.5)
                 .foregroundStyle(.gray.opacity(0.3))
 
             // 进度圆环
             Circle()
                 .trim(from: 0, to: entry.progress)
                 .stroke(style: StrokeStyle(
-                    lineWidth: 4,
+                    lineWidth: 2.5,
                     lineCap: .round
                 ))
                 .foregroundStyle(entry.isRunning ? .orange : .gray)
                 .rotationEffect(.degrees(-90))  // 从顶部开始
 
-            // 中心图标
+            // 中心图标 - HIG standard: 20pt medium
             Image(systemName: phaseSymbol(for: entry))
-                .font(.system(size: 14, weight: .medium))
+                .font(WidgetTypography.Circular.icon)
                 .foregroundStyle(entry.isRunning ? .orange : .gray)
         }
-        .modifier(GlassEffectModifier())
         .widgetAccentable()
         .containerBackground(.clear, for: .widget)
         .widgetURL(URL(string: "pomoTAP://open")!)
@@ -294,25 +292,24 @@ struct CircularComplicationView: View {
 }
 
 // Rectangular 视图 - 矩形布局
-@available(watchOS 11.5, *)
 struct RectangularComplicationView: View {
     var entry: ComplicationEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 4) {
-            // 第1行：阶段图标 + 名称
+        VStack(alignment: .leading, spacing: 2) {
+            // 第1行：阶段图标 + 名称 - HIG standard: 13pt semibold
             HStack(spacing: 4) {
                 Image(systemName: phaseSymbol(for: entry))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(WidgetTypography.Rectangular.title)
                 Text(phaseName(for: entry))
-                    .font(.system(size: 12, weight: .semibold))
+                    .font(WidgetTypography.Rectangular.title)
                 Spacer()
             }
             .foregroundStyle(entry.isRunning ? .orange : .gray)
 
-            // 第2行：剩余时间（大号）
+            // 第2行：剩余时间 - HIG standard: 17pt semibold rounded
             Text(timeString(from: entry.remainingTime))
-                .font(.system(size: 20, weight: .bold, design: .rounded))
+                .font(WidgetTypography.Rectangular.body)
                 .foregroundStyle(entry.isRunning ? .primary : .secondary)
 
             // 第3行：进度条
@@ -321,36 +318,32 @@ struct RectangularComplicationView: View {
                     // 背景
                     Capsule()
                         .fill(.gray.opacity(0.3))
-                        .frame(height: 4)
+                        .frame(height: 3)
 
                     // 进度
                     Capsule()
                         .fill(entry.isRunning ? .orange : .gray)
-                        .frame(width: geometry.size.width * entry.progress, height: 4)
+                        .frame(width: geometry.size.width * entry.progress, height: 3)
                 }
             }
-            .frame(height: 4)
+            .frame(height: 3)
         }
-        .modifier(GlassEffectModifier())
         .widgetURL(URL(string: "pomoTAP://open")!)
     }
 }
 
 // Inline 视图 - 单行文本
-@available(watchOS 11.5, *)
 struct InlineComplicationView: View {
     var entry: ComplicationEntry
 
     var body: some View {
         Text("\(phaseEmoji(for: entry)) \(phaseName(for: entry)) · \(timeString(from: entry.remainingTime))")
-            .font(.system(size: 14, design: .rounded))
-            .modifier(GlassEffectModifier())
+            .font(WidgetTypography.Inline.text)  // HIG standard: 15pt regular rounded
             .widgetURL(URL(string: "pomoTAP://open")!)
     }
 }
 
 // Corner 视图 - 角落布局（曲线）
-@available(watchOS 11.5, *)
 struct CornerComplicationView: View {
     var entry: ComplicationEntry
 
@@ -359,33 +352,21 @@ struct CornerComplicationView: View {
             // 圆形进度环
             Circle()
                 .trim(from: 0, to: entry.progress)
-                .stroke(style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .stroke(style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
                 .foregroundStyle(entry.isRunning ? .orange : .gray)
                 .rotationEffect(.degrees(-90))
 
-            // 中心图标
+            // 中心图标 - HIG standard: 12pt medium
             Image(systemName: phaseSymbol(for: entry))
-                .font(.system(size: 10, weight: .medium))
+                .font(WidgetTypography.Corner.icon)
                 .foregroundStyle(entry.isRunning ? .orange : .gray)
         }
-        .modifier(GlassEffectModifier())
         .widgetLabel {
-            // 曲线文本显示剩余时间
+            // 曲线文本显示剩余时间 - HIG standard: 13pt regular rounded
             Text(timeString(from: entry.remainingTime))
-                .font(.system(size: 12, design: .rounded))
+                .font(WidgetTypography.Corner.label)
         }
         .widgetURL(URL(string: "pomoTAP://open")!)
-    }
-}
-
-// Glass Effect Modifier with version check
-struct GlassEffectModifier: ViewModifier {
-    func body(content: Content) -> some View {
-        if #available(watchOS 26.0, *) {
-            content.glassEffect()
-        } else {
-            content
-        }
     }
 }
 
@@ -440,7 +421,7 @@ struct ComplicationView: View {
     }
 }
 
-@main
+// Primary Timer Widget (Part of Bundle)
 struct PomoTAPComplication: Widget {
     private let kind: String = "PomoTAPComplication"
 
@@ -457,6 +438,26 @@ struct PomoTAPComplication: Widget {
             .accessoryCorner
         ])
         .containerBackgroundRemovable(true)
+    }
+}
+
+// MARK: - Widget Bundle (All Widgets Entry Point)
+@main
+struct PomoTAPWidgetBundle: WidgetBundle {
+    var body: some Widget {
+        // Primary timer widget
+        PomoTAPComplication()
+        // Quick start widgets
+        QuickStartWorkWidget()
+        QuickStartBreakWidget()
+        // Cycle progress widget
+        CycleProgressWidget()
+        // Stats widget
+        StatsWidget()
+        // Next phase widget
+        NextPhaseWidget()
+        // Smart Stack interactive widget
+        PomoTAPSmartStackWidget()
     }
 }
 

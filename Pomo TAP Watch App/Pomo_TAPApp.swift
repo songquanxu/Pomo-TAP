@@ -26,11 +26,7 @@ struct Pomo_TAPApp: App {
             ContentView()
                 .environmentObject(timerModel)
                 .onOpenURL { url in
-                    // 处理从复杂功能打开应用的事件
-                    if url.scheme == "pomoTAP" {
-                        // 使用正确的 API 激活应用
-                        WKExtension.shared().openSystemURL(url)
-                    }
+                    handleDeepLink(url)
                 }
                 .alert("需要通知权限", isPresented: $showNotificationPermissionAlert) {
                     Button("去设置", role: .none) {
@@ -38,7 +34,7 @@ struct Pomo_TAPApp: App {
                     }
                     Button("稍后再说", role: .cancel) { }
                 } message: {
-                    Text("为了在番茄钟完成时通知您，我们需要通知权限。请在设置中开启通知。")
+                    Text("为了在番茄钟完成时通知您,我们需要通知权限。请在设置中开启通知。")
                 }
                 .task {
                     // 在视图加载后检查权限
@@ -54,6 +50,44 @@ struct Pomo_TAPApp: App {
                         }
                     }
                 }
+        }
+    }
+
+    // MARK: - Deep Link Handling
+    private func handleDeepLink(_ url: URL) {
+        guard url.scheme == "pomoTAP" else { return }
+
+        switch url.host {
+        case "startWork":
+            // Start work phase immediately
+            Task { @MainActor in
+                timerModel.startWorkPhaseDirectly()
+            }
+        case "startBreak":
+            // Start short break immediately
+            Task { @MainActor in
+                timerModel.startBreakPhaseDirectly()
+            }
+        case "startLongBreak":
+            // Start long break immediately
+            Task { @MainActor in
+                timerModel.startLongBreakPhaseDirectly()
+            }
+        case "toggle":
+            // Toggle timer (start/pause)
+            Task { @MainActor in
+                await timerModel.toggleTimer()
+            }
+        case "skipPhase":
+            // Skip current phase
+            Task { @MainActor in
+                await timerModel.skipCurrentPhase()
+            }
+        case "open":
+            // Just open the app - no action needed
+            break
+        default:
+            break
         }
     }
     

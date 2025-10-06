@@ -61,19 +61,22 @@ struct ContentView: View {
                 .navigationBarHidden(true)
             .toolbar {
                 ToolbarItemGroup(placement: .bottomBar) {
-                    // 左侧：重置按钮 - 次要操作
+                    // 左侧：重置按钮 - 次要操作 - 圆形样式
                     Button {
                         showResetDialog = true
                     } label: {
                         Image(systemName: "arrow.counterclockwise")
+                            .font(.system(size: 16, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(Circle().fill(.gray.opacity(0.3)))
                     }
-                    .buttonStyle(.bordered)
-                    .glassEffect()
+                    .buttonStyle(.plain)
                     .accessibilityLabel(Text(NSLocalizedString("Reset", comment: "")))
 
                     Spacer()
 
-                    // 右侧：开始/暂停/停止按钮 - 主要操作
+                    // 右侧：开始/暂停/停止按钮 - 主要操作 - 圆形样式
                     Button {
                         Task {
                             if timerModel.isInFlowCountUp && timerModel.timerRunning {
@@ -85,10 +88,15 @@ struct ContentView: View {
                         }
                     } label: {
                         Image(systemName: buttonIcon)
+                            .font(.system(size: 18, weight: .bold))
+                            .foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
+                            .background(
+                                Circle()
+                                    .fill(timerModel.isInFlowCountUp ? .yellow : .orange)
+                            )
                     }
-                    .buttonStyle(.borderedProminent)
-                    .glassEffect()
-                    .tint(timerModel.isInFlowCountUp ? .yellow : .orange)
+                    .buttonStyle(.plain)
                     .accessibilityLabel(buttonAccessibilityLabel)
                     .handGestureShortcut(.primaryAction)  // 设置为双指互点的默认按钮
                 }
@@ -120,26 +128,6 @@ struct ContentView: View {
                 }
                 .buttonStyle(.bordered)
                 .handGestureShortcut(.primaryAction)  // 设置为双指互点的默认按钮
-            }
-            .confirmationDialog(
-                NSLocalizedString("Phase_Completed", comment: ""),
-                isPresented: $timerModel.showPhaseCompletionDialog,
-                titleVisibility: .visible
-            ) {
-                Button(NSLocalizedString("Start_Immediately", comment: "")) {
-                    Task {
-                        await timerModel.startNextPhaseNow()
-                    }
-                }
-                .buttonStyle(.borderedProminent)
-                .handGestureShortcut(.primaryAction)  // 设置为双指互点的默认按钮
-
-                Button(NSLocalizedString("Start_Later", comment: ""), role: .cancel) {
-                    Task {
-                        await timerModel.startNextPhaseLater()
-                    }
-                }
-                .buttonStyle(.bordered)
             }
             .edgesIgnoringSafeArea(.all)
         }
@@ -306,20 +294,8 @@ struct ContentView: View {
         formatter.unitsStyle = .positional
         formatter.zeroFormattingBehavior = .pad
 
-        // 常亮显示（手腕放下）时的格式
-        if !wristStateManager.isWristRaised {
-            if time > 60 {
-                // 剩余时间大于1分钟：显示 "mm:--"
-                let minutes = time / 60
-                return String(format: "%d:--", minutes)
-            } else {
-                // 剩余时间小于等于1分钟：显示 ":ss"
-                let seconds = time % 60
-                return String(format: ":%02d", seconds)
-            }
-        }
-
-        // 手腕抬起时显示完整格式 "mm:ss"
+        // 所有状态下都显示完整格式 "mm:ss"
+        // AOD 模式下的亮度降低通过 Ring opacity 和 privacySensitive() 实现
         return formatter.string(from: TimeInterval(time)) ?? ""
     }
 }

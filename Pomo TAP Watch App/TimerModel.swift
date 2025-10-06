@@ -32,8 +32,9 @@ class TimerModel: NSObject, ObservableObject {
     @Published var isTransitioning = false
     @Published var transitionProgress: CGFloat = 0
     @Published var isInResetMode: Bool = false
-    @Published var isInfiniteMode: Bool = false  // 无限计时模式
-    @Published var infiniteElapsedTime: Int = 0  // 无限模式下的已过时间（秒）
+    @Published var isInfiniteMode: Bool = false  // 心流模式开关
+    @Published var infiniteElapsedTime: Int = 0  // 心流模式下的已过时间（秒）
+    @Published var isInFlowCountUp: Bool = false  // 当前是否处于心流正计时状态
 
     // MARK: - Private Properties
     private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "TimerModel")
@@ -69,6 +70,7 @@ class TimerModel: NSObject, ObservableObject {
             playSound(.stop)
             timerCore.stopTimer()
             sessionManager.stopExtendedSession()
+            cancelPendingNotifications()  // 暂停时取消通知
         } else {
             playSound(.start)
             await startTimer()
@@ -80,10 +82,20 @@ class TimerModel: NSObject, ObservableObject {
         // 停止计时器
         timerCore.stopTimer()
         sessionManager.stopExtendedSession()
+        cancelPendingNotifications()  // 重置时取消通知
 
-        // 重置状态
+        // 重置状态管理器
         stateManager.resetCycle()
         timerCore.resetTimer()
+
+        // 重置UI状态（包括时间和调整后的时长）
+        let duration = phases[0].duration
+        remainingTime = duration
+        totalTime = duration
+        adjustedPhaseDuration = duration  // 重置调整后的时长为第一阶段的默认值
+        timerCore.remainingTime = duration
+        timerCore.totalTime = duration
+
         resetUIState()
 
         playSound(.retry)
@@ -91,17 +103,22 @@ class TimerModel: NSObject, ObservableObject {
         updateSharedState()  // 更新 Widget
     }
 
-    func stopInfiniteTimer() {
-        // 无限模式下停止计时器
+    func stopFlowCountUp() async {
+        // 心流正计时模式下停止计时器
         timerCore.stopTimer()
         sessionManager.stopExtendedSession()
+        cancelPendingNotifications()  // 停止心流模式时取消通知
 
-        // 更新当前阶段的实际时长为已过时间
-        let elapsedMinutes = infiniteElapsedTime / 60
-        adjustedPhaseDuration = infiniteElapsedTime
+        // 退出心流正计时模式，获取已过时间
+        let elapsedTime = timerCore.exitFlowCountUp()
+        adjustedPhaseDuration = elapsedTime
 
         playSound(.stop)
-        logger.info("无限计时已停止，已过时间: \(elapsedMinutes) 分钟")
+        logger.info("心流正计时已停止，已过时间: \(elapsedTime / 60) 分钟")
+
+        // 进入下一个阶段
+        await moveToNextPhase(autoStart: false, skip: false)
+
         updateSharedState()  // 更新 Widget
     }
 
@@ -109,6 +126,10 @@ class TimerModel: NSObject, ObservableObject {
         // 停止计时器
         timerCore.stopTimer()
         sessionManager.stopExtendedSession()
+        cancelPendingNotifications()  // 重置当前阶段时取消通知
+
+        // 清除暂停状态，避免下次启动时使用旧的剩余时间
+        timerCore.clearPausedState()
 
         // 重置当前阶段的时间，但保持阶段索引和完成状态
         let duration = phases[currentPhaseIndex].duration
@@ -125,17 +146,25 @@ class TimerModel: NSObject, ObservableObject {
         logger.info("当前阶段已重置")
     }
 
-    func skipPhase() {
-        hasSkippedInCurrentCycle = true
+    func skipCurrentPhase() async {
+        // 停止计时器
         timerCore.stopTimer()
-        stateManager.skipPhase()
+        sessionManager.stopExtendedSession()
+        cancelPendingNotifications()  // 跳过当前阶段时取消通知
+
+        // 跳过当前阶段并自动开始下一个阶段
+        await moveToNextPhase(autoStart: true, skip: true)
+
         playSound(.notification)
-        updateSharedState()  // 更新 Widget
+        logger.info("用户跳过当前阶段并自动开始下一阶段")
     }
 
     func moveToNextPhase(autoStart: Bool, skip: Bool = false) async {
         // 重置通知状态
         notificationSent = false
+
+        // 清除暂停状态，避免新阶段使用旧的剩余时间
+        timerCore.clearPausedState()
 
         // 开始过渡动画
         startTransitionAnimation()
@@ -165,49 +194,102 @@ class TimerModel: NSObject, ObservableObject {
     }
 
     func handleNotificationResponse() async {
-        await startTimer()
+        // 防止重复响应：如果已经在下一个阶段或计时器正在运行，直接返回
+        // 这是幂等性保护，避免用户多次点击通知导致阶段错乱
+        if timerRunning {
+            logger.warning("通知响应被忽略：计时器已在运行")
+            return
+        }
+
+        logger.info("处理通知响应：准备进入下一阶段")
+
+        // 进入下一阶段并自动开始
+        await moveToNextPhase(autoStart: true)
     }
 
     func requestNotificationPermission() {
         notificationManager.requestNotificationPermission()
     }
 
-    func adjustTime(by delta: Int) {
-        guard !timerRunning else { return }
+    // MARK: - Quick Start Methods (Deep Link Handlers)
+    func startWorkPhaseDirectly() {
+        // Navigate to Work phase (index 0) and start immediately
+        logger.info("Quick start: Work phase")
+        navigateToPhaseAndStart(phaseIndex: 0)
+    }
 
-        // 计算已经过去的时间（保持不变）
-        let elapsedTime = totalTime - remainingTime
+    func startBreakPhaseDirectly() {
+        // Navigate to Short Break phase (index 1) and start immediately
+        logger.info("Quick start: Short Break phase")
+        navigateToPhaseAndStart(phaseIndex: 1)
+    }
 
-        // 调整总时长（不能小于已经过去的时间）
-        let newTotalTime = max(elapsedTime, totalTime + delta)
+    func startLongBreakPhaseDirectly() {
+        // Navigate to Long Break phase (index 3) and start immediately
+        logger.info("Quick start: Long Break phase")
+        navigateToPhaseAndStart(phaseIndex: 3)
+    }
 
-        // 更新总时长
-        totalTime = newTotalTime
-        timerCore.totalTime = newTotalTime
+    private func navigateToPhaseAndStart(phaseIndex: Int) {
+        guard phaseIndex < phases.count else { return }
 
-        // 更新剩余时间（已走过的时间不变，剩余时间相应增减）
-        remainingTime = newTotalTime - elapsedTime
-        timerCore.remainingTime = remainingTime
+        // Stop current timer if running
+        if timerRunning {
+            timerCore.stopTimer()
+            sessionManager.stopExtendedSession()
+            cancelPendingNotifications()
+        }
 
-        // 调整后的时长用于显示
-        adjustedPhaseDuration = newTotalTime
+        // Navigate to target phase
+        stateManager.currentPhaseIndex = phaseIndex
+        currentPhaseName = phases[phaseIndex].name
 
-        updateTomatoRingPosition()
-        logger.info("调整阶段时长: \(delta)秒, 新总时长: \(newTotalTime)秒, 已过时间: \(elapsedTime)秒, 剩余时间: \(self.remainingTime)秒")
+        // Update UI state for new phase
+        updateUIState()
+
+        // Start timer immediately
+        Task { @MainActor in
+            playSound(.start)
+            await startTimer()
+        }
     }
 
     func appBecameActive() async {
         // 应用变为活跃状态时的处理
-        await sessionManager.startExtendedSession()
+        // 注意：不在这里启动会话，因为：
+        // 1. 如果计时器运行，startTimer() 已经启动了会话
+        // 2. 重复调用会导致 "only single session allowed" 错误
+        // 更新 Widget 状态
+        updateSharedState()
+        logger.debug("应用变为活跃，已更新 Widget 状态")
     }
 
     func appEnteredBackground() {
         // 应用进入后台时的处理
-        sessionManager.stopExtendedSession()
+        // 注意：不在这里停止会话！
+        // 后台会话的目的就是让计时器在后台继续运行
+        // 会话应该由 toggleTimer() 或 resetXXX() 等显式操作停止
+        // 更新 Widget 状态
+        updateSharedState()
+        logger.debug("应用进入后台，已更新 Widget 状态")
     }
 
     // MARK: - Widget Integration
     private func updateSharedState() {
+        // 将 PhaseStatus 转换为 PhaseCompletionStatus (定义在 SharedTypes.swift)
+        let completionStatus = stateManager.phaseCompletionStatus.map { status -> PhaseCompletionStatus in
+            switch status {
+            case .notStarted:
+                return .notStarted
+            case .current:
+                return .current
+            case .normalCompleted:
+                return .normalCompleted
+            case .skipped:
+                return .skipped
+            }
+        }
+
         let state = SharedTimerState(
             currentPhaseIndex: currentPhaseIndex,
             remainingTime: remainingTime,
@@ -215,7 +297,10 @@ class TimerModel: NSObject, ObservableObject {
             currentPhaseName: currentPhaseName,
             lastUpdateTime: Date(),
             totalTime: totalTime,
-            phases: phases.map { PhaseInfo(duration: $0.duration, name: $0.name, status: $0.status.rawValue) }
+            phases: phases.map { PhaseInfo(duration: $0.duration, name: $0.name, status: $0.status.rawValue) },
+            completedCycles: stateManager.completedCycles,
+            phaseCompletionStatus: completionStatus,
+            hasSkippedInCurrentCycle: stateManager.hasSkippedInCurrentCycle
         )
 
         if let userDefaults = UserDefaults(suiteName: SharedTimerState.suiteName),
@@ -225,7 +310,9 @@ class TimerModel: NSObject, ObservableObject {
 
             // 刷新 Widget
             WidgetCenter.shared.reloadAllTimelines()
-            logger.info("已更新 Widget 状态")
+            logger.info("✅ 主App已更新Widget状态: phase=\(self.currentPhaseName), running=\(self.timerRunning), remaining=\(self.remainingTime)秒, total=\(self.totalTime)秒")
+        } else {
+            logger.error("❌ 主App无法更新Widget状态: UserDefaults或编码失败")
         }
     }
 
@@ -244,14 +331,21 @@ class TimerModel: NSObject, ObservableObject {
         timerCore.$timerRunning.assign(to: &$timerRunning)
         timerCore.$totalTime.assign(to: &$totalTime)
         timerCore.$infiniteElapsedTime.assign(to: &$infiniteElapsedTime)
+        timerCore.$isInFlowCountUp.assign(to: &$isInFlowCountUp)
 
         // 双向绑定无限模式
         $isInfiniteMode.sink { [weak self] newValue in
             self?.timerCore.isInfiniteMode = newValue
-            if newValue {
-                // 开启无限模式时重置已过时间
-                self?.infiniteElapsedTime = 0
-                self?.timerCore.infiniteElapsedTime = 0
+        }.store(in: &cancellables)
+
+        // 监听心流模式开关变化，处理心流正计时状态下的关闭
+        $isInfiniteMode.sink { [weak self] isEnabled in
+            guard let self = self else { return }
+            // 如果关闭心流模式，且当前处于心流正计时状态
+            if !isEnabled && self.isInFlowCountUp && self.timerRunning {
+                Task { @MainActor [weak self] in
+                    await self?.stopFlowCountUp()
+                }
             }
         }.store(in: &cancellables)
     }
@@ -264,39 +358,34 @@ class TimerModel: NSObject, ObservableObject {
                 self.handlePhaseCompletion()
             }
         }
+
+        // 设置定期更新回调（每分钟触发，用于 Widget 同步）
+        timerCore.onPeriodicUpdate = { [weak self] in
+            Task { @MainActor [weak self] in
+                guard let self = self else { return }
+                self.updateSharedState()
+                self.logger.debug("定期 Widget 更新已触发")
+            }
+        }
     }
 
     private func handlePhaseCompletion() {
-        // 检查应用是否在前台
-        let appState = WKExtension.shared().applicationState
-
-        if appState == .active {
-            // 应用在前台，播放自定义提醒
+        // 检查是否应该进入心流正计时模式
+        // 条件：1) 心流模式已开启 2) 当前是工作阶段
+        if isInfiniteMode && stateManager.isCurrentPhaseWorkPhase() {
+            // 进入心流正计时模式
+            timerCore.enterFlowCountUp()
+            // 重新启动计时器（正计时）
             Task {
-                await playInAppAlert()
+                await timerCore.startTimer()
             }
+            logger.info("工作阶段完成，进入心流正计时模式")
+            return
         }
 
-        // 无论前台还是后台，都记录日志
-        logger.info("阶段完成，应用状态: \(appState.rawValue)")
-    }
-
-    private func playInAppAlert() async {
-        // watchOS 只支持触觉反馈，不支持自定义系统音效
-        // 使用增强的触觉反馈模式来创建独特的提醒
-
-        // 第一组：快速双击
-        WKInterfaceDevice.current().play(.notification)
-        try? await Task.sleep(nanoseconds: 200_000_000) // 0.2秒
-        WKInterfaceDevice.current().play(.notification)
-
-        // 短暂停顿
-        try? await Task.sleep(nanoseconds: 500_000_000) // 0.5秒
-
-        // 第二组：单击（强调）
-        WKInterfaceDevice.current().play(.success)
-
-        logger.info("应用内提醒已播放（仅触觉反馈）")
+        // 普通模式：依赖系统通知（已在 startTimer() 时预约）
+        // 系统通知会自动触发，无需额外操作
+        logger.info("阶段完成，依赖系统通知")
     }
 
     private func initializeState() {
@@ -313,17 +402,19 @@ class TimerModel: NSObject, ObservableObject {
 
     private func startTimer() async {
         // 启动计时器核心 - 使用当前的 remainingTime 值
-        // 不要重置 timerCore.totalTime 和 timerCore.remainingTime，
-        // 因为它们可能已经被 Digital Crown 调整过
         await timerCore.startTimer()
         await sessionManager.startExtendedSession()
 
-        // 安排通知
-        notificationManager.sendNotification(
-            for: .phaseCompleted,
-            currentPhaseDuration: remainingTime / 60,
-            nextPhaseDuration: phases[(currentPhaseIndex + 1) % phases.count].duration / 60
-        )
+        // 只在非心流正计时状态下发送通知
+        // 心流正计时不需要通知（已经处于正计时状态）
+        if !isInFlowCountUp {
+            // 安排通知 - 使用剩余时间（秒）
+            notificationManager.sendNotification(
+                for: .phaseCompleted,
+                currentPhaseDuration: remainingTime,  // ✅ 修正：传递秒数，不除以60
+                nextPhaseDuration: phases[(currentPhaseIndex + 1) % phases.count].duration / 60
+            )
+        }
     }
 
     private func startTransitionAnimation() {
@@ -366,6 +457,12 @@ class TimerModel: NSObject, ObservableObject {
 
     private func playSound(_ soundType: WKHapticType) {
         WKInterfaceDevice.current().play(soundType)
+    }
+
+    private func cancelPendingNotifications() {
+        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
+        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
+        logger.info("已取消所有待发送和已送达的通知")
     }
 
     // MARK: - 兼容性属性和方法

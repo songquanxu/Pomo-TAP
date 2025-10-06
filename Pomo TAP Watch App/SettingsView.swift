@@ -15,7 +15,7 @@ struct SettingsView: View {
                     HStack {
                         Image(systemName: "infinity")
                             .foregroundColor(.yellow)
-                        Text(NSLocalizedString("Infinite_Timer", comment: ""))
+                        Text(NSLocalizedString("Flow_Mode", comment: ""))
                     }
                 }
             }

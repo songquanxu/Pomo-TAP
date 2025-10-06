@@ -13,6 +13,7 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
     // MARK: - Private Properties
     private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "BackgroundSessionManager")
     private var extendedSession: WKExtendedRuntimeSession?
+    private var isStarting = false // 互斥锁：防止并发启动
 
     // MARK: - Session State Enum
     private enum SessionState {
@@ -35,8 +36,9 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
 
     // MARK: - Public Methods
     func startExtendedSession() async {
-        guard WKExtension.shared().applicationState == .active else {
-            logger.warning("应用不在活跃状态，无法启动会话")
+        // 防止并发启动
+        guard !isStarting else {
+            logger.warning("会话正在启动中，忽略重复请求")
             return
         }
 
@@ -47,177 +49,150 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
             return
         }
 
+        // 设置互斥锁
+        isStarting = true
+        defer { isStarting = false }
+
         // 增加引用计数
         sessionRetainCount += 1
 
-        // 清理任何无效的会话
-        if let currentSession = extendedSession, currentSession.state == .invalid {
-            cleanupSession()
+        // 必须先完全清理现有会话（无论状态如何）
+        if let existingSession = extendedSession {
+            logger.info("清理现有会话（状态: \(existingSession.state.rawValue)）")
+            if existingSession.state == .running || existingSession.state == .notStarted {
+                existingSession.invalidate()
+            }
+            extendedSession = nil
+            sessionState = .none
+
+            // 等待系统完成清理（增加到 1.5 秒，确保系统完全释放资源）
+            try? await Task.sleep(nanoseconds: 1_500_000_000)
+            logger.debug("会话清理等待完成")
         }
 
+        // 再次检查是否已有会话（防止竞态条件）
+        guard extendedSession == nil else {
+            logger.warning("清理后仍存在会话，取消启动")
+            sessionRetainCount -= 1
+            return
+        }
+
+        // 创建新会话
         sessionState = .starting
         let session = WKExtendedRuntimeSession()
         session.delegate = self
+
+        // 重要：立即保存强引用，防止会话被提前释放
         extendedSession = session
 
-        do {
-            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
-                // 启动会话
-                session.start()
+        // 启动会话（同步调用，但系统需要时间异步启动）
+        session.start()
+        logger.info("已请求启动扩展会话（引用计数: \(self.sessionRetainCount)）")
 
-                // 使用 Task 实现超时和状态监听
-                Task { @MainActor in
-                    let startTime = Date()
-                    let timeoutDuration: TimeInterval = 5.0
-
-                    while Date().timeIntervalSince(startTime) < timeoutDuration {
-                        if session.state == .running {
-                            continuation.resume()
-                            return
-                        } else if session.state == .invalid {
-                            continuation.resume(throwing: NSError(domain: "BackgroundSessionManager", code: -2, userInfo: [NSLocalizedDescriptionKey: "Session became invalid"]))
-                            return
-                        }
-
-                        try? await Task.sleep(nanoseconds: 1_000_000_000) // 1秒检查间隔
-                    }
-
-                    // 超时处理
-                    if self.sessionState == .starting {
-                        self.logger.error("会话启动超时")
-                        self.sessionState = .invalid
-                        continuation.resume(throwing: NSError(domain: "BackgroundSessionManager", code: -1, userInfo: [NSLocalizedDescriptionKey: "Session start timeout"]))
-                    }
-                }
-            }
-
-            sessionState = .running
-            logger.info("扩展会话启动成功")
-
-        } catch {
-            sessionState = .invalid
-            extendedSession = nil
-            logger.error("启动扩展会话失败: \(error.localizedDescription)")
-        }
+        // CRITICAL FIX: 等待系统实际启动会话，防止"only single session allowed"错误
+        // 系统需要时间处理启动请求，如果立即返回可能导致下次调用时检测到"会话冲突"
+        try? await Task.sleep(nanoseconds: 500_000_000)  // 0.5秒缓冲
+        logger.debug("会话启动请求已发送，等待系统确认")
     }
 
     func stopExtendedSession() {
-        guard let session = extendedSession else { return }
+        guard sessionRetainCount > 0 else {
+            logger.debug("引用计数已为0，无需停止会话")
+            return
+        }
 
-        // 增加引用计数检查
+        // 减少引用计数
+        sessionRetainCount -= 1
+
+        // 如果还有其他引用，不停止会话
         if sessionRetainCount > 0 {
-            sessionRetainCount -= 1
-            if sessionRetainCount > 0 {
-                logger.debug("会话仍被其他地方使用，延迟停止")
-                return
-            }
+            logger.debug("会话仍被使用，引用计数: \(self.sessionRetainCount)")
+            return
         }
 
-        let currentSession = session
-
-        switch currentSession.state {
-        case .running:
-            sessionState = .stopping
-
-            DispatchQueue.main.async {
-                if currentSession === self.extendedSession && currentSession.state == .running {
-                    self.extendedSession = nil
-                    self.sessionState = .none
-                    currentSession.invalidate()
-                    self.logger.info("正常停止运行中的会话: \(currentSession)")
-                } else {
-                    self.logger.debug("会话状态已改变，跳过停止操作")
-                    self.extendedSession = nil
-                    self.sessionState = .none
-                }
-            }
-
-        case .invalid:
-            logger.debug("会话已失效，直接清理")
-            extendedSession = nil
-            sessionState = .none
-
-        case .notStarted:
-            logger.debug("会话未启动，直接清理")
-            extendedSession = nil
-            sessionState = .none
-
-        default:
-            logger.warning("未知的会话状态: \(currentSession.state.rawValue)")
-            DispatchQueue.main.async {
-                self.extendedSession = nil
-                self.sessionState = .none
-                currentSession.invalidate()
-            }
+        // 引用计数归零，停止并清理会话
+        guard let session = extendedSession else {
+            logger.debug("没有活跃会话需要停止")
+            return
         }
+
+        logger.info("停止扩展会话（状态: \(session.state.rawValue)）")
+
+        // 同步清理，避免时序问题
+        if session.state == .running || session.state == .notStarted {
+            session.invalidate()
+        }
+
+        extendedSession = nil
+        sessionState = .none
     }
 
     // MARK: - WKExtendedRuntimeSessionDelegate
     nonisolated func extendedRuntimeSessionDidStart(_ extendedRuntimeSession: WKExtendedRuntimeSession) {
         Task { @MainActor in
             guard self.extendedSession === extendedRuntimeSession else {
-                self.logger.warning("收到过期会话的启动通知")
+                self.logger.warning("收到过期会话的启动通知，忽略")
                 return
             }
 
             self.sessionState = .running
-            self.logger.info("会话成功启动: \(extendedRuntimeSession)")
+            self.logger.info("✅ 会话成功启动（引用计数: \(self.sessionRetainCount)）")
         }
     }
 
     nonisolated func extendedRuntimeSessionWillExpire(_ extendedRuntimeSession: WKExtendedRuntimeSession) {
         Task { @MainActor in
-            guard self.extendedSession === extendedRuntimeSession else { return }
+            guard self.extendedSession === extendedRuntimeSession else {
+                self.logger.warning("收到过期会话的即将过期通知，忽略")
+                return
+            }
 
-            self.logger.warning("会话即将过期: \(extendedRuntimeSession)")
-
-            // 在当前会话过期前启动新会话 - 增加延迟避免频繁重启
-            try? await Task.sleep(nanoseconds: 500_000_000) // 0.5秒延迟
-            await self.startExtendedSession()
+            self.logger.warning("⏰ 会话即将过期，将由系统自动失效")
+            // 注意：不在这里重启会话，等待 didInvalidate 回调
         }
     }
 
     nonisolated func extendedRuntimeSession(_ extendedRuntimeSession: WKExtendedRuntimeSession, didInvalidateWith reason: WKExtendedRuntimeSessionInvalidationReason, error: Error?) {
         Task { @MainActor in
-            guard self.extendedSession === extendedRuntimeSession else { return }
-
-            let errorDescription = error?.localizedDescription ?? "无错误信息"
-            self.logger.info("会话已失效: \(reason.rawValue), 错误: \(errorDescription)")
-
-            // 更新状态
-            self.sessionState = .invalid
-
-            // 处理特定原因
-            switch reason {
-            case .resignedFrontmost:
-                if self.sessionRetainCount > 0 {
-                    try? await Task.sleep(nanoseconds: 1_000_000_000) // 1秒延迟
-                    await self.startExtendedSession()
-                }
-
-            case .suppressedBySystem, .error, .expired:
-                if self.sessionRetainCount > 0 {
-                    try? await Task.sleep(nanoseconds: 2_000_000_000) // 2秒延迟
-                    await self.startExtendedSession()
-                }
-
-            case .none, .sessionInProgress:
-                break
-
-            @unknown default:
-                self.logger.error("未知的会话终止原因: \(reason.rawValue)")
+            guard self.extendedSession === extendedRuntimeSession else {
+                self.logger.warning("收到过期会话的失效通知，忽略")
+                return
             }
 
-            // 清理状态
+            let errorDescription = error?.localizedDescription ?? "无"
+            let reasonText = self.getInvalidationReasonText(reason)
+            self.logger.info("❌ 会话已失效 - 原因: \(reasonText), 错误: \(errorDescription)")
+
+            // 更新状态并清理引用
+            self.sessionState = .invalid
             self.extendedSession = nil
+
+            // 重要：不自动重启会话
+            // 原因：
+            // 1. 避免无限重启循环
+            // 2. 会话失效通常意味着应用不再需要后台执行
+            // 3. 如果需要后台执行，应由计时器逻辑主动调用 startExtendedSession()
+            self.logger.debug("会话已清理，引用计数: \(self.sessionRetainCount)")
         }
     }
 
-    // MARK: - Private Methods
-    private func cleanupSession() {
-        if let session = extendedSession {
-            session.invalidate()
-            extendedSession = nil
+    // MARK: - Helper Methods
+    private func getInvalidationReasonText(_ reason: WKExtendedRuntimeSessionInvalidationReason) -> String {
+        switch reason {
+        case .none:
+            return "正常结束"
+        case .sessionInProgress:
+            return "已有会话运行"
+        case .expired:
+            return "过期"
+        case .resignedFrontmost:
+            return "应用失去前台"
+        case .suppressedBySystem:
+            return "系统限制"
+        case .error:
+            return "错误"
+        @unknown default:
+            return "未知(\(reason.rawValue))"
         }
     }
 }

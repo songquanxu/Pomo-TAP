@@ -87,9 +87,9 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
                     )
                 }
 
-                // 创建触发器 - 使用更精确的时间间隔
+                // 创建触发器 - 使用剩余时间（秒）
                 let trigger = UNTimeIntervalNotificationTrigger(
-                    timeInterval: TimeInterval(currentPhaseDuration * 60),
+                    timeInterval: TimeInterval(currentPhaseDuration),  // ✅ 修正：直接使用秒数
                     repeats: false
                 )
 
@@ -107,7 +107,7 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
 
                 // 添加新通知
                 try await UNUserNotificationCenter.current().add(request)
-                logger.info("通知已安排: \(requestIdentifier), \(currentPhaseDuration)分钟后触发")
+                logger.info("通知已安排: \(requestIdentifier), \(currentPhaseDuration)秒后触发")
 
             } catch {
                 logger.error("发送通知失败: \(error.localizedDescription)")
@@ -135,14 +135,9 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        Task {
-            let appState = await WKExtension.shared().applicationState
-            if appState == .active {
-                completionHandler([])
-            } else {
-                completionHandler([.banner, .sound])
-            }
-        }
+        // 无论前台还是后台，都显示系统通知（横幅 + 声音）
+        // 这确保用户在任何状态下都能收到阶段完成提醒
+        completionHandler([.banner, .sound])
     }
 
     // MARK: - Private Methods

@@ -2,6 +2,7 @@
   "sourceLanguage" : "zh-Hans",
   "strings" : {
     "%lld" : {
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -140,6 +141,41 @@
         }
       }
     },
+    "Flow_Mode" : {
+      "comment" : "心流模式开关",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Flow Mode"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フローモード"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "플로우 모드"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "心流模式"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "心流模式"
+          }
+        }
+      }
+    },
     "Great_Job" : {
       "comment" : "通知标题：完成一个番茄时显示",
       "localizations" : {
@@ -210,7 +246,7 @@
         }
       }
     },
-    "NotificationPermissionDescription" : {
+    "Notification_Permission_Description" : {
       "comment" : "通知权限描述文本",
       "extractionState" : "stale",
       "localizations" : {
@@ -281,7 +317,43 @@
         }
       }
     },
+    "Phase_Completed" : {
+      "comment" : "阶段完成对话框标题",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Phase Completed"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "フェーズ完了"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "단계 완료"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "阶段完成"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "階段完成"
+          }
+        }
+      }
+    },
     "Phase_Long_Break" : {
+      "comment" : "长休息阶段",
       "extractionState" : "stale",
       "localizations" : {
         "en" : {
@@ -317,6 +389,7 @@
       }
     },
     "Phase_Short_Break" : {
+      "comment" : "短休息阶段",
       "extractionState" : "stale",
       "localizations" : {
         "en" : {
@@ -352,6 +425,7 @@
       }
     },
     "Phase_Work" : {
+      "comment" : "专注工作阶段",
       "extractionState" : "stale",
       "localizations" : {
         "en" : {
@@ -526,6 +600,41 @@
         }
       }
     },
+    "Settings" : {
+      "comment" : "设置页面标题",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Settings"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "설정"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设置"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "設定"
+          }
+        }
+      }
+    },
     "Skip" : {
       "comment" : "跳过按钮",
       "extractionState" : "stale",
@@ -558,6 +667,41 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "跳過"
+          }
+        }
+      }
+    },
+    "Skip_Current_Phase" : {
+      "comment" : "跳过当前阶段选项",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Skip Current Phase"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在のフェーズをスキップ"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "현재 단계 건너뛰기"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳过本次"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "跳過本次"
           }
         }
       }
@@ -632,75 +776,8 @@
         }
       }
     },
-    "为了在番茄钟完成时通知您，我们需要通知权限。请在设置中开启通知。" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "To notify you when your Pomodoro is complete, we need notification permission. Please enable notifications in Settings."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ポモドーロ完了時に通知するために、通知権限が必要です。設定で通知を有効にしてください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "뽀모도로가 완료되면 알림을 보내기 위해 알림 권한이 필요합니다. 설정에서 알림을 활성화해 주세요."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "为了在番茄钟完成时通知您，我们需要通知权限。请在设置中开启通知。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "為了在番茄鐘完成時通知您，我們需要通知權限。請在設定中開啟通知。"
-          }
-        }
-      }
-    },
-    "去设置" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Go to Settings"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "設定へ"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "설정으로 이동"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "去设置"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "前往設定"
-          }
-        }
-      }
-    },
-    "稍后再说" : {
+    "Start_Later" : {
+      "comment" : "稍后开始下一阶段",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -723,117 +800,13 @@
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "稍后再说"
+            "value" : "稍后开始"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "稍後再說"
-          }
-        }
-      }
-    },
-    "需要通知权限" : {
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Notification Permission Required"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "通知権限が必要です"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "알림 권한이 필요합니다"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "需要通知权限"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "需要通知權限"
-          }
-        }
-      }
-    },
-    "Settings" : {
-      "comment" : "设置页面标题",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Settings"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "設定"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "설정"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "设置"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "設定"
-          }
-        }
-      }
-    },
-    "Infinite_Timer" : {
-      "comment" : "无限计时开关",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Infinite Timer"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "無限タイマー"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "무한 타이머"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "无限计时"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "無限計時"
+            "value" : "稍後開始"
           }
         }
       }
@@ -872,6 +845,18 @@
           }
         }
       }
+    },
+    "为了在番茄钟完成时通知您,我们需要通知权限。请在设置中开启通知。" : {
+
+    },
+    "去设置" : {
+
+    },
+    "稍后再说" : {
+
+    },
+    "需要通知权限" : {
+
     }
   },
   "version" : "1.0"

@@ -96,9 +96,9 @@ class TimerStateManager: ObservableObject {
         saveState()
     }
 
-    func moveToNextPhase() {
-        // 更新当前阶段的完成状态
-        phaseCompletionStatus[currentPhaseIndex] = .normalCompleted
+    func moveToNextPhase(currentPhaseStatus: PhaseStatus = .normalCompleted) {
+        // 更新当前阶段的完成状态（使用传入的状态或默认为正常完成）
+        phaseCompletionStatus[currentPhaseIndex] = currentPhaseStatus
         savePhaseCompletionStatus()
 
         // 移动到下一个阶段
@@ -119,9 +119,13 @@ class TimerStateManager: ObservableObject {
 
     func skipPhase() {
         hasSkippedInCurrentCycle = true
-        phaseCompletionStatus[currentPhaseIndex] = .skipped
-        savePhaseCompletionStatus()
-        moveToNextPhase()
+        // 直接调用 moveToNextPhase 并传递 .skipped 状态
+        moveToNextPhase(currentPhaseStatus: .skipped)
+    }
+
+    func isCurrentPhaseWorkPhase() -> Bool {
+        // 判断当前阶段是否为工作阶段
+        return phases[currentPhaseIndex].name == "Work"
     }
 
     // MARK: - Private Methods
