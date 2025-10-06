@@ -89,6 +89,7 @@ struct CycleProgressRectangularView: View {
             HStack(spacing: 4) {
                 Image(systemName: "repeat.circle.fill")
                     .font(WidgetTypography.Rectangular.title)
+                    .widgetAccentable()
                 Text(NSLocalizedString("Cycle_Progress", comment: ""))
                     .font(WidgetTypography.Rectangular.title)
                 Spacer()

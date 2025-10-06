@@ -307,32 +307,24 @@ enum ComplicationError: Error {
 }
 
 // 复杂功能视图 - Circular
+// Uses Apple's Gauge system control with .accessoryCircular style
+// Reference: WWDC 2022 "Go further with Complications in WidgetKit"
 struct CircularComplicationView: View {
     var entry: ComplicationEntry
 
     var body: some View {
-        ZStack {
-            // 背景圆环（灰色）
-            Circle()
-                .stroke(lineWidth: 2.5)
-                .foregroundStyle(.gray.opacity(0.3))
-
-            // 进度圆环
-            Circle()
-                .trim(from: 0, to: entry.progress)
-                .stroke(style: StrokeStyle(
-                    lineWidth: 2.5,
-                    lineCap: .round
-                ))
-                .foregroundStyle(entry.isRunning ? .orange : .gray)
-                .rotationEffect(.degrees(-90))  // 从顶部开始
-
-            // 中心图标 - HIG standard: 20pt medium
+        // Apple HIG: Use Gauge for circular progress complications
+        Gauge(value: entry.progress, in: 0...1) {
+            // Empty label - not shown in accessoryCircular
+        } currentValueLabel: {
+            // Center content: Phase icon
             Image(systemName: phaseSymbol(for: entry))
                 .font(WidgetTypography.Circular.icon)
                 .foregroundStyle(entry.isRunning ? .orange : .gray)
+                .widgetAccentable()
         }
-        .widgetAccentable()
+        .gaugeStyle(.accessoryCircular)
+        .tint(entry.isRunning ? .orange : .gray)
         .containerBackground(.clear, for: .widget)
         .widgetURL(URL(string: "pomoTAP://open")!)
     }
@@ -348,6 +340,7 @@ struct RectangularComplicationView: View {
             HStack(spacing: 4) {
                 Image(systemName: phaseSymbol(for: entry))
                     .font(WidgetTypography.Rectangular.title)
+                    .widgetAccentable()
                 Text(phaseName(for: entry))
                     .font(WidgetTypography.Rectangular.title)
                 Spacer()
@@ -391,27 +384,31 @@ struct InlineComplicationView: View {
 }
 
 // Corner 视图 - 角落布局（曲线）
+// Uses AccessoryWidgetBackground + Gauge in widgetLabel
+// Reference: WWDC 2022 "Go further with Complications in WidgetKit"
 struct CornerComplicationView: View {
     var entry: ComplicationEntry
 
     var body: some View {
         ZStack {
-            // 圆形进度环
-            Circle()
-                .trim(from: 0, to: entry.progress)
-                .stroke(style: StrokeStyle(lineWidth: 2.5, lineCap: .round))
-                .foregroundStyle(entry.isRunning ? .orange : .gray)
-                .rotationEffect(.degrees(-90))
+            // Apple HIG: AccessoryWidgetBackground for consistent backdrop
+            AccessoryWidgetBackground()
 
-            // 中心图标 - HIG standard: 12pt medium
+            // Center icon
             Image(systemName: phaseSymbol(for: entry))
                 .font(WidgetTypography.Corner.icon)
                 .foregroundStyle(entry.isRunning ? .orange : .gray)
+                .widgetAccentable()
         }
         .widgetLabel {
-            // 曲线文本显示剩余时间 - HIG standard: 13pt regular rounded
-            Text(timeString(from: entry.remainingTime))
-                .font(WidgetTypography.Corner.label)
+            // Apple HIG: Use Gauge in widgetLabel for curved progress + text
+            Gauge(value: entry.progress, in: 0...1) {
+                // Empty label
+            } currentValueLabel: {
+                Text(timeString(from: entry.remainingTime))
+                    .font(WidgetTypography.Corner.label)
+            }
+            .tint(entry.isRunning ? .orange : .gray)
         }
         .widgetURL(URL(string: "pomoTAP://open")!)
     }

@@ -210,6 +210,7 @@ struct SmartStackWidgetView: View {
                 Image(systemName: phaseSymbol)
                     .font(WidgetTypography.SmartStack.title)
                     .foregroundStyle(phaseColor)
+                    .widgetAccentable()
 
                 Text(phaseName)
                     .font(WidgetTypography.SmartStack.title)

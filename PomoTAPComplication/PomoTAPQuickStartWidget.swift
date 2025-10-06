@@ -88,6 +88,9 @@ struct QuickStartCircularView: View {
 
     var body: some View {
         ZStack {
+            // Apple HIG: AccessoryWidgetBackground for consistent backdrop
+            AccessoryWidgetBackground()
+
             Circle()
                 .fill(.orange.gradient)
 
@@ -95,6 +98,7 @@ struct QuickStartCircularView: View {
             Image(systemName: entry.action.symbol)
                 .font(WidgetTypography.Circular.icon)
                 .foregroundStyle(.white)
+                .widgetAccentable()
         }
         .containerBackground(.clear, for: .widget)
         .widgetURL(URL(string: entry.action.urlScheme)!)
@@ -107,6 +111,9 @@ struct QuickStartCornerView: View {
 
     var body: some View {
         ZStack {
+            // Apple HIG: AccessoryWidgetBackground for consistent backdrop
+            AccessoryWidgetBackground()
+
             Circle()
                 .fill(.orange.gradient)
 
@@ -114,6 +121,7 @@ struct QuickStartCornerView: View {
             Image(systemName: entry.action.symbol)
                 .font(WidgetTypography.Corner.icon)
                 .foregroundStyle(.white)
+                .widgetAccentable()
         }
         .widgetLabel {
             // HIG standard: 13pt regular rounded for corner labels
