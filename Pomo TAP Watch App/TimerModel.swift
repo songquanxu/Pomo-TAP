@@ -194,17 +194,23 @@ class TimerModel: NSObject, ObservableObject {
     }
 
     func handleNotificationResponse() async {
-        // 防止重复响应：如果已经在下一个阶段或计时器正在运行，直接返回
-        // 这是幂等性保护，避免用户多次点击通知导致阶段错乱
+        // 防止重复响应：如果计时器正在运行，直接返回
         if timerRunning {
             logger.warning("通知响应被忽略：计时器已在运行")
             return
         }
 
-        logger.info("处理通知响应：准备进入下一阶段")
-
-        // 进入下一阶段并自动开始
-        await moveToNextPhase(autoStart: true)
+        // 检查是否已经在新阶段等待启动
+        // 如果 remainingTime == totalTime 且计时器未运行，说明阶段已自动切换，只需启动计时器
+        if remainingTime == totalTime && remainingTime > 0 {
+            logger.info("处理通知响应：阶段已切换，启动计时器")
+            playSound(.start)
+            await startTimer()
+        } else {
+            // 否则，需要先进入下一阶段再启动
+            logger.info("处理通知响应：进入下一阶段并启动计时器")
+            await moveToNextPhase(autoStart: true)
+        }
     }
 
     func requestNotificationPermission() {
@@ -384,9 +390,16 @@ class TimerModel: NSObject, ObservableObject {
             return
         }
 
-        // 普通模式：依赖系统通知（已在 startTimer() 时预约）
-        // 系统通知会自动触发，无需额外操作
-        logger.info("阶段完成，依赖系统通知")
+        // 普通模式：自动进入下一阶段，但不启动计时器
+        // 用户可以通过以下方式启动：
+        // 1. 点击通知中的"立即开始"按钮
+        // 2. 手动点击主界面的开始按钮
+        // 3. 从 Complications 小组件触发
+        Task {
+            await moveToNextPhase(autoStart: false)
+            playSound(.notification)
+            logger.info("阶段完成，已自动进入下一阶段（未启动计时器）")
+        }
     }
 
     private func initializeState() {
