@@ -319,6 +319,7 @@
     },
     "Phase_Completed" : {
       "comment" : "阶段完成对话框标题",
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -778,6 +779,7 @@
     },
     "Start_Later" : {
       "comment" : "稍后开始下一阶段",
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {

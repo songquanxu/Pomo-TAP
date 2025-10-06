@@ -7,7 +7,8 @@
 
 import WidgetKit
 import SwiftUI
-import os  // 添加 os 导入
+import os
+import WatchKit  // Added for WKExtension.shared().applicationState
 
 // 添加日志记录器
 private let logger = Logger(
@@ -63,24 +64,29 @@ struct Provider: TimelineProvider {
         do {
             let currentEntry = try loadCurrentState()
 
-            // 如果计时器没有运行，只返回当前状态
+            // 如果计时器没有运行,只返回当前状态
             if !currentEntry.isRunning {
                 let timeline = Timeline(entries: [currentEntry], policy: .never)
                 completion(timeline)
                 return
             }
 
-            // 计时器运行时的逻辑 - 使用稀疏采样策略
+            // 检测应用状态，用于自适应时间线策略
+            let appState = WKExtension.shared().applicationState
+            let isActiveOrForeground = (appState == .active || appState == .inactive)
+
+            // 计时器运行时的逻辑 - 使用状态感知的稀疏采样策略
             var entries: [ComplicationEntry] = [currentEntry]
             let calendar = Calendar.current
             let now = Date()
             let remainingSeconds = currentEntry.remainingTime
 
-            // 稀疏采样策略：
-            // - 前5分钟：每分钟更新
-            // - 5-20分钟：每5分钟更新
-            // - 最后5分钟：每分钟更新
-            let timeIntervals = generateTimeIntervals(remainingSeconds: remainingSeconds)
+            // 自适应采样策略：
+            // - 活跃状态：使用稀疏采样（前5分钟每分钟、中间每5分钟、最后5分钟每分钟）
+            // - AOD/后台状态：仅每5分钟更新，减少电池消耗
+            let timeIntervals = isActiveOrForeground
+                ? generateActiveModeIntervals(remainingSeconds: remainingSeconds)
+                : generateAODModeIntervals(remainingSeconds: remainingSeconds)
 
             for interval in timeIntervals {
                 if let futureDate = calendar.date(byAdding: .second, value: interval, to: now) {
@@ -120,6 +126,7 @@ struct Provider: TimelineProvider {
             }
 
             let timeline = Timeline(entries: entries, policy: .atEnd)
+            logger.debug("生成时间线：\(entries.count)个条目，模式：\(isActiveOrForeground ? "活跃" : "AOD/后台")")
             completion(timeline)
 
         } catch {
@@ -136,6 +143,28 @@ struct Provider: TimelineProvider {
             let timeline = Timeline(entries: [entry], policy: .never)
             completion(timeline)
         }
+    }
+
+    // 活跃模式时间间隔生成（原稀疏采样策略）
+    private func generateActiveModeIntervals(remainingSeconds: Int) -> [Int] {
+        return generateTimeIntervals(remainingSeconds: remainingSeconds)
+    }
+
+    // AOD/后台模式时间间隔生成（仅每5分钟更新）
+    private func generateAODModeIntervals(remainingSeconds: Int) -> [Int] {
+        var intervals: [Int] = []
+
+        // 每5分钟更新一次，直到剩余时间结束
+        for second in stride(from: 300, to: remainingSeconds, by: 300) {
+            intervals.append(second)
+        }
+
+        // 如果剩余时间不足5分钟，至少在结束前1分钟更新一次
+        if remainingSeconds > 60 && remainingSeconds < 300 {
+            intervals.append(remainingSeconds - 60)
+        }
+
+        return intervals
     }
 
     private func generateTimeIntervals(remainingSeconds: Int) -> [Int] {
@@ -187,7 +216,7 @@ struct Provider: TimelineProvider {
             score += 10  // 暂停状态仍有一定相关性
         }
 
-        // 时间上下文：工作日工作时间段（+20分）
+        // 时间上下文：工作日工作时间段（+5分，降低权重）
         let calendar = Calendar.current
         let hour = calendar.component(.hour, from: date)
         let weekday = calendar.component(.weekday, from: date)
@@ -195,11 +224,29 @@ struct Provider: TimelineProvider {
         // weekday: 1=周日, 2=周一, ..., 7=周六
         // 工作日(周一到周五)且工作时间(9:00-18:00)
         if (2...6).contains(weekday) && (9...18).contains(hour) {
-            score += 20
+            score += 5  // 降低权重，Focus mode 更重要
+        }
+
+        // NEW: 休息即将到来加成（+10分）
+        // 工作阶段最后10分钟，用户希望知道何时休息
+        if isWorkPhaseActive() && remainingTime <= 600 && remainingTime > 300 {
+            score += 10
         }
 
         // 分数范围：0-100
-        return TimelineEntryRelevance(score: score)
+        return TimelineEntryRelevance(score: min(score, 100))
+    }
+
+    // Helper: 检测当前是否为工作阶段
+    // watchOS 26: 使用共享状态判断阶段类型
+    private func isWorkPhaseActive() -> Bool {
+        guard let userDefaults = UserDefaults(suiteName: SharedTimerState.suiteName),
+              let data = userDefaults.data(forKey: SharedTimerState.userDefaultsKey),
+              let state = try? JSONDecoder().decode(SharedTimerState.self, from: data) else {
+            return false
+        }
+
+        return state.isCurrentPhaseWorkPhase
     }
     
     private func loadCurrentState() throws -> ComplicationEntry {

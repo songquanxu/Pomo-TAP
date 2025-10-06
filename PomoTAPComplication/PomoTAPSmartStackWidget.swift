@@ -121,10 +121,11 @@ struct SmartStackProvider: TimelineProvider {
     private func calculateRelevance(isRunning: Bool, remainingTime: Int, date: Date) -> TimelineEntryRelevance {
         var score: Float = 0
 
+        // Base score: Timer state (0-60 points)
         if isRunning {
-            score += 60  // Higher base score for Smart Stack priority
+            score += 60  // Higher base score for Smart Stack priority (up from 50)
 
-            // Last 5 minutes boost
+            // Last 5 minutes urgency boost (+30 points)
             if remainingTime <= 300 {
                 score += 30
             }
@@ -132,16 +133,39 @@ struct SmartStackProvider: TimelineProvider {
             score += 20  // Stopped but still relevant
         }
 
-        // Work hours context
+        // Work hours context (+5 points, reduced from +10)
+        // Focus mode detection is more important than generic time context
         let calendar = Calendar.current
         let hour = calendar.component(.hour, from: date)
         let weekday = calendar.component(.weekday, from: date)
 
+        // weekday: 1=Sunday, 2=Monday, ..., 7=Saturday
+        // Workdays (Mon-Fri) and work hours (9:00-18:00)
         if (2...6).contains(weekday) && (9...18).contains(hour) {
+            score += 5  // Reduced weight, Focus mode more relevant
+        }
+
+        // NEW: Break approaching bonus (+10 points)
+        // When work phase is ending soon, user wants to know when break arrives
+        // This boosts Smart Stack visibility in the last 10 minutes of work phase
+        if isWorkPhaseActive() && remainingTime <= 600 && remainingTime > 300 {
             score += 10
         }
 
-        return TimelineEntryRelevance(score: score)
+        // Score range: 0-100 (capped)
+        return TimelineEntryRelevance(score: min(score, 100))
+    }
+
+    // Helper: Detect if current phase is work phase
+    // watchOS 26: Use shared state to determine phase type
+    private func isWorkPhaseActive() -> Bool {
+        guard let userDefaults = UserDefaults(suiteName: SharedTimerState.suiteName),
+              let data = userDefaults.data(forKey: SharedTimerState.userDefaultsKey),
+              let state = try? JSONDecoder().decode(SharedTimerState.self, from: data) else {
+            return false
+        }
+
+        return state.isCurrentPhaseWorkPhase
     }
 
     private func loadSmartStackState() throws -> SmartStackEntry {

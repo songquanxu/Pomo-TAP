@@ -9,7 +9,7 @@ import WidgetKit
 @MainActor
 class TimerModel: NSObject, ObservableObject {
     // MARK: - 管理器实例
-    private let timerCore: TimerCore
+    let timerCore: TimerCore  // Made public for AOD frequency control
     private let stateManager: TimerStateManager
     private let sessionManager: BackgroundSessionManager
     private let notificationManager: NotificationManager
@@ -300,7 +300,8 @@ class TimerModel: NSObject, ObservableObject {
             phases: phases.map { PhaseInfo(duration: $0.duration, name: $0.name, status: $0.status.rawValue) },
             completedCycles: stateManager.completedCycles,
             phaseCompletionStatus: completionStatus,
-            hasSkippedInCurrentCycle: stateManager.hasSkippedInCurrentCycle
+            hasSkippedInCurrentCycle: stateManager.hasSkippedInCurrentCycle,
+            isCurrentPhaseWorkPhase: stateManager.isCurrentPhaseWorkPhase()
         )
 
         if let userDefaults = UserDefaults(suiteName: SharedTimerState.suiteName),

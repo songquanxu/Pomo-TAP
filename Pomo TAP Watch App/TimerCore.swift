@@ -14,6 +14,38 @@ class TimerCore: NSObject, ObservableObject {
     @Published var isInfiniteMode: Bool = false  // 心流模式开关
     @Published var infiniteElapsedTime: Int = 0  // 心流模式下的已过时间
     @Published var isInFlowCountUp: Bool = false  // 当前是否处于心流正计时状态
+    @Published var updateFrequency: UpdateFrequency = .normal  // 更新频率（普通 vs AOD）
+
+    // MARK: - Update Frequency Enum
+    enum UpdateFrequency: CustomStringConvertible {
+        case normal    // 1-second updates (active state)
+        case aod       // 1Hz updates (Always-On Display state)
+
+        var interval: DispatchTimeInterval {
+            switch self {
+            case .normal, .aod:
+                return .seconds(1)  // Both use 1-second interval for watchOS 26
+            }
+        }
+
+        var leeway: DispatchTimeInterval {
+            switch self {
+            case .normal:
+                return .milliseconds(100)  // Standard leeway for active state
+            case .aod:
+                return .milliseconds(50)   // Tighter leeway for AOD precision
+            }
+        }
+
+        var description: String {
+            switch self {
+            case .normal:
+                return "正常模式"
+            case .aod:
+                return "AOD模式"
+            }
+        }
+    }
 
     // MARK: - Private Properties
     private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "TimerCore")
@@ -49,7 +81,12 @@ class TimerCore: NSObject, ObservableObject {
 
         timer?.cancel()
         timer = DispatchSource.makeTimerSource(queue: .main)
-        timer?.schedule(deadline: .now(), repeating: .seconds(1), leeway: .milliseconds(100))
+        // Use frequency-aware scheduling for AOD optimization
+        timer?.schedule(
+            deadline: .now(),
+            repeating: updateFrequency.interval,
+            leeway: updateFrequency.leeway
+        )
         timer?.setEventHandler { [weak self] in
             Task { @MainActor in
                 self?.updateTimer()
@@ -58,7 +95,7 @@ class TimerCore: NSObject, ObservableObject {
         timer?.resume()
 
         timerRunning = true
-        logger.info("计时器已启动。剩余时间: \(self.remainingTime) 秒。")
+        logger.info("计时器已启动。剩余时间: \(self.remainingTime) 秒，更新频率: \(self.updateFrequency)")
     }
 
     func stopTimer() {

@@ -11,6 +11,7 @@ struct SharedTimerState: Codable {
     let completedCycles: Int
     let phaseCompletionStatus: [PhaseCompletionStatus]
     let hasSkippedInCurrentCycle: Bool
+    let isCurrentPhaseWorkPhase: Bool  // NEW: Track if current phase is work phase
 
     var progress: Double {
         1.0 - Double(remainingTime) / Double(totalTime)

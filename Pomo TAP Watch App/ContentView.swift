@@ -13,7 +13,6 @@ struct ContentView: View {
     @EnvironmentObject var timerModel: TimerModel
     @Environment(\.scenePhase) var scenePhase
     @Environment(\.isLuminanceReduced) var isLuminanceReduced
-    @StateObject private var wristStateManager = WristStateManager()
     @State private var showResetDialog = false
     @State private var selectedTab = 0  // 当前选中的标签页
 
@@ -42,6 +41,10 @@ struct ContentView: View {
                 }
             }
         }
+        .onChange(of: isLuminanceReduced) { _, isAOD in
+            // Update timer frequency based on AOD state (watchOS 26 1Hz support)
+            timerModel.timerCore.updateFrequency = isAOD ? .aod : .normal
+        }
         .task {
             await timerModel.appBecameActive()
         }
@@ -52,7 +55,7 @@ struct ContentView: View {
             timerRingView()
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .overlay(alignment: .topLeading) {
-                    if wristStateManager.isWristRaised && !isLuminanceReduced {
+                    if !isLuminanceReduced {
                         topDateView()
                             .padding(.leading, 12)
                             .padding(.top, 12)
@@ -165,11 +168,11 @@ struct ContentView: View {
         GeometryReader { geometry in
             let ringSize = min(geometry.size.width, geometry.size.height) * 0.85
             ZStack {
-                // AOD 状态下也显示背景环和进度环，但是降低亮度
-                if wristStateManager.isWristRaised || isLuminanceReduced {
+                // 在 AOD 状态下也显示背景环和进度环，但是降低亮度
+                if !isLuminanceReduced {
                     timerRingBackground(ringSize: ringSize)
-                    timerRingProgress(ringSize: ringSize)
                 }
+                timerRingProgress(ringSize: ringSize)
                 timerContent()
             }
             .frame(width: ringSize, height: ringSize)
@@ -236,7 +239,7 @@ struct ContentView: View {
     private func timerContent() -> some View {
         VStack(spacing: 5) {
             // AOD 状态下隐藏奖牌
-            if wristStateManager.isWristRaised && !isLuminanceReduced {
+            if !isLuminanceReduced {
                 HStack() {
                     Image(systemName: "medal.fill")
                         .foregroundColor(timerModel.hasSkippedInCurrentCycle ? .green : .orange)
@@ -247,6 +250,7 @@ struct ContentView: View {
             }
 
             // 时间显示：心流正计时模式显示已过时间（金色），普通模式显示剩余时间
+            // watchOS 26: 在 AOD 模式下也保持 1Hz 实时更新
             Text(timeString(time: timerModel.isInFlowCountUp ? timerModel.infiniteElapsedTime : timerModel.remainingTime))
                 .font(.system(size: 32, weight: .bold, design: .rounded))
                 .foregroundColor(timerModel.isInFlowCountUp ? .yellow : .primary)
@@ -254,7 +258,7 @@ struct ContentView: View {
                 .privacySensitive()  // 添加隐私保护
 
             // AOD 状态下隐藏阶段指示器
-            if wristStateManager.isWristRaised && !isLuminanceReduced {
+            if !isLuminanceReduced {
                 phaseIndicators()
             }
         }
