@@ -15,7 +15,6 @@ struct ContentView: View {
     @Environment(\.isLuminanceReduced) var isLuminanceReduced
     @StateObject private var wristStateManager = WristStateManager()
     @State private var showResetDialog = false
-    @State private var crownValue: Double = 0
     @State private var selectedTab = 0  // 当前选中的标签页
 
     var body: some View {
@@ -62,22 +61,24 @@ struct ContentView: View {
                 .navigationBarHidden(true)
             .toolbar {
                 ToolbarItemGroup(placement: .bottomBar) {
-                    // 左侧：重置按钮
+                    // 左侧：重置按钮 - 次要操作
                     Button {
                         showResetDialog = true
                     } label: {
                         Image(systemName: "arrow.counterclockwise")
                     }
+                    .buttonStyle(.bordered)
+                    .glassEffect()
                     .accessibilityLabel(Text(NSLocalizedString("Reset", comment: "")))
 
                     Spacer()
 
-                    // 右侧：开始/暂停/停止按钮
+                    // 右侧：开始/暂停/停止按钮 - 主要操作
                     Button {
                         Task {
-                            if timerModel.isInfiniteMode && timerModel.timerRunning {
-                                // 无限模式下运行时，点击停止
-                                timerModel.stopInfiniteTimer()
+                            if timerModel.isInFlowCountUp && timerModel.timerRunning {
+                                // 心流正计时模式下运行时，点击停止
+                                await timerModel.stopFlowCountUp()
                             } else {
                                 await timerModel.toggleTimer()
                             }
@@ -85,6 +86,9 @@ struct ContentView: View {
                     } label: {
                         Image(systemName: buttonIcon)
                     }
+                    .buttonStyle(.borderedProminent)
+                    .glassEffect()
+                    .tint(timerModel.isInFlowCountUp ? .yellow : .orange)
                     .accessibilityLabel(buttonAccessibilityLabel)
                     .handGestureShortcut(.primaryAction)  // 设置为双指互点的默认按钮
                 }
@@ -94,46 +98,57 @@ struct ContentView: View {
                 isPresented: $showResetDialog,
                 titleVisibility: .visible
             ) {
+                Button(NSLocalizedString("Skip_Current_Phase", comment: ""), role: .destructive) {
+                    Task {
+                        await timerModel.skipCurrentPhase()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+
                 Button(NSLocalizedString("Reset_Current_Phase", comment: ""), role: .destructive) {
                     timerModel.resetCurrentPhase()
                 }
+                .buttonStyle(.borderedProminent)
+
                 Button(NSLocalizedString("Reset_Cycle", comment: ""), role: .destructive) {
                     timerModel.resetCycle()
                 }
+                .buttonStyle(.borderedProminent)
+
                 Button(NSLocalizedString("Cancel", comment: ""), role: .cancel) {
                     // 默认选项，不做任何操作
                 }
+                .buttonStyle(.bordered)
+                .handGestureShortcut(.primaryAction)  // 设置为双指互点的默认按钮
+            }
+            .confirmationDialog(
+                NSLocalizedString("Phase_Completed", comment: ""),
+                isPresented: $timerModel.showPhaseCompletionDialog,
+                titleVisibility: .visible
+            ) {
+                Button(NSLocalizedString("Start_Immediately", comment: "")) {
+                    Task {
+                        await timerModel.startNextPhaseNow()
+                    }
+                }
+                .buttonStyle(.borderedProminent)
+                .handGestureShortcut(.primaryAction)  // 设置为双指互点的默认按钮
+
+                Button(NSLocalizedString("Start_Later", comment: ""), role: .cancel) {
+                    Task {
+                        await timerModel.startNextPhaseLater()
+                    }
+                }
+                .buttonStyle(.bordered)
             }
             .edgesIgnoringSafeArea(.all)
-            .focusable(true)
-            .digitalCrownRotation(
-                $crownValue,
-                from: 0,
-                through: Double(timerModel.totalTime * 2),  // 允许延长到原时长的2倍
-                by: 60.0,  // 1 分钟（60 秒）
-                sensitivity: .medium,
-                isContinuous: false,
-                isHapticFeedbackEnabled: true
-            )
-            .onChange(of: crownValue) { oldValue, newValue in
-                guard !timerModel.timerRunning else { return }
-                let delta = Int(newValue - oldValue)
-                if delta != 0 {
-                    timerModel.adjustTime(by: delta)
-                    // 同步更新 crownValue 到实际的 totalTime
-                    crownValue = Double(timerModel.totalTime)
-                }
-            }
-            .onAppear {
-                crownValue = Double(timerModel.totalTime)
-            }
         }
     }
 
     // 按钮图标
     private var buttonIcon: String {
-        if timerModel.isInfiniteMode && timerModel.timerRunning {
-            return "stop.fill"  // 无限模式运行时显示停止按钮
+        if timerModel.isInFlowCountUp && timerModel.timerRunning {
+            return "stop.fill"  // 心流正计时模式运行时显示停止按钮
         } else {
             return timerModel.timerRunning ? "pause.fill" : "play.fill"
         }
@@ -141,7 +156,7 @@ struct ContentView: View {
 
     // 按钮的无障碍标签
     private var buttonAccessibilityLabel: Text {
-        if timerModel.isInfiniteMode && timerModel.timerRunning {
+        if timerModel.isInFlowCountUp && timerModel.timerRunning {
             return Text(NSLocalizedString("Stop", comment: ""))
         } else {
             return timerModel.timerRunning ? Text(NSLocalizedString("Pause", comment: "")) : Text(NSLocalizedString("Start", comment: ""))
@@ -197,28 +212,37 @@ struct ContentView: View {
         let progress: CGFloat
         if timerModel.isTransitioning {
             progress = 1 - timerModel.transitionProgress
-        } else if timerModel.isInfiniteMode {
-            // 无限模式：显示完整圆环（100%）
+        } else if timerModel.isInFlowCountUp {
+            // 心流正计时模式：显示完整圆环（100%）
             progress = 1.0
         } else {
             // 普通模式：直接使用剩余时间和总时间的比例来计算进度
             progress = 1 - CGFloat(timerModel.remainingTime) / CGFloat(timerModel.totalTime)
         }
 
-        // 无限模式下使用金色，否则使用橙色；AOD 状态下降低亮度
-        let ringColor: Color
-        if timerModel.isInfiniteMode {
-            ringColor = isLuminanceReduced ? Color.yellow.opacity(0.5) : Color.yellow
-        } else {
-            ringColor = isLuminanceReduced ? Color.orange.opacity(0.5) : Color.orange
-        }
-
-        return Circle()
+        let ring = Circle()
             .trim(from: 0.0, to: progress)
             .stroke(style: StrokeStyle(lineWidth: strokeWidth, lineCap: .round, lineJoin: .round))
-            .foregroundColor(ringColor)
             .rotationEffect(Angle(degrees: 270.0))
             .animation(timerModel.isTransitioning ? .easeInOut(duration: 0.5) : .none, value: progress)
+
+        if timerModel.isInFlowCountUp {
+            // 心流正计时模式：彩虹渐变色
+            return AnyView(ring.foregroundStyle(
+                AngularGradient(
+                    gradient: Gradient(colors: [
+                        .red, .orange, .yellow, .green, .cyan, .blue, .purple, .red
+                    ]),
+                    center: .center,
+                    startAngle: .degrees(0),
+                    endAngle: .degrees(360)
+                )
+            ))
+        } else {
+            // 普通模式：橙色；AOD 状态下降低亮度
+            let ringColor = isLuminanceReduced ? Color.orange.opacity(0.5) : Color.orange
+            return AnyView(ring.foregroundColor(ringColor))
+        }
     }
 
     private func timerContent() -> some View {
@@ -234,10 +258,10 @@ struct ContentView: View {
                 }
             }
 
-            // 时间显示：无限模式下显示已过时间，普通模式显示剩余时间
-            Text(timeString(time: timerModel.isInfiniteMode ? timerModel.infiniteElapsedTime : timerModel.remainingTime))
+            // 时间显示：心流正计时模式显示已过时间（金色），普通模式显示剩余时间
+            Text(timeString(time: timerModel.isInFlowCountUp ? timerModel.infiniteElapsedTime : timerModel.remainingTime))
                 .font(.system(size: 32, weight: .bold, design: .rounded))
-                .foregroundColor(timerModel.isInfiniteMode ? .yellow : .primary)
+                .foregroundColor(timerModel.isInFlowCountUp ? .yellow : .primary)
                 .allowsHitTesting(false)
                 .privacySensitive()  // 添加隐私保护
 
@@ -256,7 +280,7 @@ struct ContentView: View {
                     duration: timerModel.phases[index].duration,
                     adjustedDuration: index == timerModel.currentPhaseIndex ? timerModel.adjustedPhaseDuration : nil,
                     isCycleCompleted: timerModel.currentCycleCompleted && index != 0,
-                    isInfiniteMode: timerModel.isInfiniteMode,
+                    isInFlowCountUp: timerModel.isInFlowCountUp,
                     infiniteElapsedTime: timerModel.infiniteElapsedTime
                 )
             }
@@ -281,17 +305,21 @@ struct ContentView: View {
         formatter.allowedUnits = [.minute, .second]
         formatter.unitsStyle = .positional
         formatter.zeroFormattingBehavior = .pad
-        
+
+        // 常亮显示（手腕放下）时的格式
         if !wristStateManager.isWristRaised {
-            if time < 60 {  // 如果剩余时间少于1分钟
-                return formatter.string(from: TimeInterval(time)) ?? ""
+            if time > 60 {
+                // 剩余时间大于1分钟：显示 "mm:--"
+                let minutes = time / 60
+                return String(format: "%d:--", minutes)
             } else {
-                let components = formatter.string(from: TimeInterval(time))?.components(separatedBy: ":")
-                if let minutes = components?.first {
-                    return "\(minutes):--"  // 只显示分钟数
-                }
+                // 剩余时间小于等于1分钟：显示 ":ss"
+                let seconds = time % 60
+                return String(format: ":%02d", seconds)
             }
         }
+
+        // 手腕抬起时显示完整格式 "mm:ss"
         return formatter.string(from: TimeInterval(time)) ?? ""
     }
 }
@@ -301,8 +329,8 @@ struct PhaseIndicator: View {
     let duration: Int
     let adjustedDuration: Int?  // 调整后的时长（仅当前阶段）
     let isCycleCompleted: Bool
-    let isInfiniteMode: Bool  // 是否处于无限模式
-    let infiniteElapsedTime: Int  // 无限模式下的已过时间
+    let isInFlowCountUp: Bool  // 是否处于心流正计时状态
+    let infiniteElapsedTime: Int  // 心流正计时下的已过时间
 
     var body: some View {
         Text(displayText)
@@ -312,8 +340,8 @@ struct PhaseIndicator: View {
 
     // 计算要显示的文本
     private var displayText: String {
-        // 如果是无限模式且是当前阶段，显示金色无穷符号或实际时长
-        if isInfiniteMode && status == .current {
+        // 如果是心流正计时模式且是当前阶段，显示金色无穷符号或实际时长
+        if isInFlowCountUp && status == .current {
             // 如果已过时间为0（还未开始计时），显示∞
             if infiniteElapsedTime == 0 {
                 return "∞"
@@ -343,8 +371,8 @@ struct PhaseIndicator: View {
     }
 
     private var color: Color {
-        // 无限模式下当前阶段显示金色
-        if isInfiniteMode && status == .current {
+        // 心流正计时模式下当前阶段显示金色
+        if isInFlowCountUp && status == .current {
             return .yellow
         }
 
@@ -378,42 +406,5 @@ extension View {
         } else {
             self
         }
-    }
-}
-
-// 修改抬腕状态管理器
-class WristStateManager: NSObject, ObservableObject {
-    @Published var isWristRaised = true
-    
-    override init() {
-        super.init()
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(willActivate),
-            name: WKApplication.willEnterForegroundNotification,
-            object: nil
-        )
-        NotificationCenter.default.addObserver(
-            self,
-            selector: #selector(didDeactivate),
-            name: WKApplication.didEnterBackgroundNotification,
-            object: nil
-        )
-    }
-    
-    @objc private func willActivate() {
-        DispatchQueue.main.async {
-            self.isWristRaised = true
-        }
-    }
-    
-    @objc private func didDeactivate() {
-        DispatchQueue.main.async {
-            self.isWristRaised = false
-        }
-    }
-    
-    deinit {
-        NotificationCenter.default.removeObserver(self)
     }
 }

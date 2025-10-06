@@ -8,11 +8,14 @@ struct SharedTimerState: Codable {
     let lastUpdateTime: Date
     let totalTime: Int
     let phases: [PhaseInfo]
-    
+    let completedCycles: Int
+    let phaseCompletionStatus: [PhaseCompletionStatus]
+    let hasSkippedInCurrentCycle: Bool
+
     var progress: Double {
         1.0 - Double(remainingTime) / Double(totalTime)
     }
-    
+
     var standardizedPhaseName: String {
         switch currentPhaseName.lowercased() {
         case "work", "专注":
@@ -25,7 +28,7 @@ struct SharedTimerState: Codable {
             return "work"
         }
     }
-    
+
     static let userDefaultsKey = "TimerState"
     static let suiteName = "group.songquan.Pomo-TAP"
 }
@@ -36,7 +39,23 @@ struct PhaseInfo: Codable {
     let status: String
 }
 
-// MARK: - Notification Types
-enum NotificationEvent {
-    case phaseCompleted
-} 
+// MARK: - Phase Completion Status
+enum PhaseCompletionStatus: String, Codable {
+    case notStarted
+    case current
+    case normalCompleted
+    case skipped
+
+    var displayColor: String {
+        switch self {
+        case .normalCompleted:
+            return "orange"
+        case .skipped:
+            return "green"
+        case .current:
+            return "blue"
+        case .notStarted:
+            return "gray"
+        }
+    }
+}
