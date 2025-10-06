@@ -307,84 +307,79 @@ enum ComplicationError: Error {
 }
 
 // 复杂功能视图 - Circular
-// Uses Apple's Gauge system control with .accessoryCircular style
+// Uses Closed Gauge style per Apple HIG for watchOS complications
 // Reference: WWDC 2022 "Go further with Complications in WidgetKit"
 struct CircularComplicationView: View {
     var entry: ComplicationEntry
 
     var body: some View {
-        // Apple HIG: Use Gauge for circular progress complications
+        // Apple HIG: Use closed gauge for progress-based complications
         Gauge(value: entry.progress, in: 0...1) {
             // Empty label - not shown in accessoryCircular
         } currentValueLabel: {
-            // Center content: Phase icon
+            // Center content: Phase icon with improved symbols
             Image(systemName: phaseSymbol(for: entry))
-                .font(WidgetTypography.Circular.icon)
-                .foregroundStyle(entry.isRunning ? .orange : .gray)
+                .font(.system(size: 20, weight: .medium))
+                .foregroundStyle(entry.isRunning ? .orange : .white.opacity(0.6))
                 .widgetAccentable()
         }
-        .gaugeStyle(.accessoryCircular)
-        .tint(entry.isRunning ? .orange : .gray)
+        .gaugeStyle(.accessoryCircularCapacity)  // Closed gauge style
+        .tint(entry.isRunning ? .orange : .white.opacity(0.4))
         .containerBackground(.clear, for: .widget)
         .widgetURL(URL(string: "pomoTAP://open")!)
     }
 }
 
 // Rectangular 视图 - 矩形布局
+// Apple HIG: Clear hierarchy, glanceable information
 struct RectangularComplicationView: View {
     var entry: ComplicationEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            // 第1行：阶段图标 + 名称 - HIG standard: 13pt semibold
-            HStack(spacing: 4) {
+        VStack(alignment: .leading, spacing: 3) {
+            // 第1行：阶段图标 + 名称 - HIG standard: clear visual hierarchy
+            HStack(spacing: 5) {
                 Image(systemName: phaseSymbol(for: entry))
-                    .font(WidgetTypography.Rectangular.title)
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(entry.isRunning ? .orange : .white.opacity(0.6))
                     .widgetAccentable()
                 Text(phaseName(for: entry))
-                    .font(WidgetTypography.Rectangular.title)
+                    .font(.system(size: 13, weight: .semibold, design: .rounded))
+                    .foregroundStyle(entry.isRunning ? .primary : .secondary)
                 Spacer()
             }
-            .foregroundStyle(entry.isRunning ? .orange : .gray)
 
-            // 第2行：剩余时间 - HIG standard: 17pt semibold rounded
+            // 第2行：剩余时间 - HIG standard: prominent display
             Text(timeString(from: entry.remainingTime))
-                .font(WidgetTypography.Rectangular.body)
+                .font(.system(size: 24, weight: .semibold, design: .rounded))
                 .foregroundStyle(entry.isRunning ? .primary : .secondary)
+                .lineLimit(1)
 
-            // 第3行：进度条
-            GeometryReader { geometry in
-                ZStack(alignment: .leading) {
-                    // 背景
-                    Capsule()
-                        .fill(.gray.opacity(0.3))
-                        .frame(height: 3)
-
-                    // 进度
-                    Capsule()
-                        .fill(entry.isRunning ? .orange : .gray)
-                        .frame(width: geometry.size.width * entry.progress, height: 3)
-                }
-            }
-            .frame(height: 3)
+            // 第3行：进度条 - HIG: subtle visual indicator
+            ProgressView(value: entry.progress)
+                .tint(entry.isRunning ? .orange : .white.opacity(0.4))
+                .frame(height: 4)
         }
+        .padding(.vertical, 2)
         .widgetURL(URL(string: "pomoTAP://open")!)
     }
 }
 
 // Inline 视图 - 单行文本
+// Apple HIG: Concise, glanceable text above the clock
 struct InlineComplicationView: View {
     var entry: ComplicationEntry
 
     var body: some View {
-        Text("\(phaseEmoji(for: entry)) \(phaseName(for: entry)) · \(timeString(from: entry.remainingTime))")
-            .font(WidgetTypography.Inline.text)  // HIG standard: 15pt regular rounded
+        // HIG: Simple, readable format for inline widgets
+        Text("\(phaseEmoji(for: entry)) \(timeString(from: entry.remainingTime))")
+            .font(.system(size: 15, weight: .medium, design: .rounded))
             .widgetURL(URL(string: "pomoTAP://open")!)
     }
 }
 
 // Corner 视图 - 角落布局（曲线）
-// Uses AccessoryWidgetBackground + Gauge in widgetLabel
+// Apple HIG: Curved progress arc with center icon and label text
 // Reference: WWDC 2022 "Go further with Complications in WidgetKit"
 struct CornerComplicationView: View {
     var entry: ComplicationEntry
@@ -394,21 +389,21 @@ struct CornerComplicationView: View {
             // Apple HIG: AccessoryWidgetBackground for consistent backdrop
             AccessoryWidgetBackground()
 
-            // Center icon
+            // Center icon with improved styling
             Image(systemName: phaseSymbol(for: entry))
-                .font(WidgetTypography.Corner.icon)
-                .foregroundStyle(entry.isRunning ? .orange : .gray)
+                .font(.system(size: 24, weight: .medium))
+                .foregroundStyle(entry.isRunning ? .orange : .white.opacity(0.6))
                 .widgetAccentable()
         }
         .widgetLabel {
-            // Apple HIG: Use Gauge in widgetLabel for curved progress + text
-            Gauge(value: entry.progress, in: 0...1) {
+            // Apple HIG: Curved gauge wraps around corner
+            ProgressView(value: entry.progress) {
                 // Empty label
             } currentValueLabel: {
                 Text(timeString(from: entry.remainingTime))
-                    .font(WidgetTypography.Corner.label)
+                    .font(.system(size: 14, weight: .semibold, design: .rounded))
             }
-            .tint(entry.isRunning ? .orange : .gray)
+            .tint(entry.isRunning ? .orange : .white.opacity(0.4))
         }
         .widgetURL(URL(string: "pomoTAP://open")!)
     }
@@ -418,13 +413,14 @@ struct CornerComplicationView: View {
 private func phaseSymbol(for entry: ComplicationEntry) -> String {
     switch entry.phase {
     case "work":
-        return entry.isRunning ? "brain.head.profile.fill" : "brain.head.profile"
+        // 使用 wand.and.sparkles 表示专注/工作状态
+        return entry.isRunning ? "wand.and.sparkles" : "wand.and.stars"
     case "shortBreak":
         return entry.isRunning ? "cup.and.saucer.fill" : "cup.and.saucer"
     case "longBreak":
         return entry.isRunning ? "figure.walk.motion" : "figure.walk"
     default:
-        return entry.isRunning ? "brain.head.profile.fill" : "brain.head.profile"
+        return entry.isRunning ? "wand.and.sparkles" : "wand.and.stars"
     }
 }
 
