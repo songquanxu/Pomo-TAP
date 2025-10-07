@@ -94,7 +94,7 @@ class TimerStateManager: ObservableObject {
 
     func resetCycle() {
         currentPhaseIndex = 0
-        completedCycles = 0
+        // ✅ 不重置 completedCycles - 保留历史奖章数据
         hasSkippedInCurrentCycle = false
         resetPhaseCompletionStatus()
         currentPhaseName = phases[0].name
