@@ -62,48 +62,51 @@ struct ContentView: View {
                     }
                 }
                 .navigationBarHidden(true)
-            .toolbar {
-                ToolbarItemGroup(placement: .bottomBar) {
-                    // 左侧：重置按钮 - 次要操作 - 圆形样式
-                    Button {
-                        showResetDialog = true
-                    } label: {
-                        Image(systemName: "arrow.counterclockwise")
-                            .font(.system(size: 16, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 40, height: 40)
-                            .background(Circle().fill(.gray.opacity(0.3)))
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(Text(NSLocalizedString("Reset", comment: "")))
-
-                    Spacer()
-
-                    // 右侧：开始/暂停/停止按钮 - 主要操作 - 圆形样式
-                    Button {
-                        Task {
-                            if timerModel.isInFlowCountUp && timerModel.timerRunning {
-                                // 心流正计时模式下运行时，点击停止
-                                await timerModel.stopFlowCountUp()
-                            } else {
-                                await timerModel.toggleTimer()
+                // AOD 模式下隐藏底部按钮
+                .toolbar {
+                    if !isLuminanceReduced {
+                        ToolbarItemGroup(placement: .bottomBar) {
+                            // 左侧：重置按钮 - 次要操作 - 圆形样式
+                            Button {
+                                showResetDialog = true
+                            } label: {
+                                Image(systemName: "arrow.counterclockwise")
+                                    .font(.system(size: 16, weight: .semibold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 40, height: 40)
+                                    .background(Circle().fill(.gray.opacity(0.3)))
                             }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(Text(NSLocalizedString("Reset", comment: "")))
+
+                            Spacer()
+
+                            // 右侧：开始/暂停/停止按钮 - 主要操作 - 圆形样式
+                            Button {
+                                Task {
+                                    if timerModel.isInFlowCountUp && timerModel.timerRunning {
+                                        // 心流正计时模式下运行时，点击停止
+                                        await timerModel.stopFlowCountUp()
+                                    } else {
+                                        await timerModel.toggleTimer()
+                                    }
+                                }
+                            } label: {
+                                Image(systemName: buttonIcon)
+                                    .font(.system(size: 18, weight: .bold))
+                                    .foregroundStyle(.white)
+                                    .frame(width: 40, height: 40)
+                                    .background(
+                                        Circle()
+                                            .fill(timerModel.isInFlowCountUp ? .yellow : .orange)
+                                    )
+                            }
+                            .buttonStyle(.plain)
+                            .accessibilityLabel(buttonAccessibilityLabel)
+                            .handGestureShortcut(.primaryAction)  // 设置为双指互点的默认按钮
                         }
-                    } label: {
-                        Image(systemName: buttonIcon)
-                            .font(.system(size: 18, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 40, height: 40)
-                            .background(
-                                Circle()
-                                    .fill(timerModel.isInFlowCountUp ? .yellow : .orange)
-                            )
                     }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel(buttonAccessibilityLabel)
-                    .handGestureShortcut(.primaryAction)  // 设置为双指互点的默认按钮
                 }
-            }
             .confirmationDialog(
                 NSLocalizedString("Reset_Dialog_Title", comment: ""),
                 isPresented: $showResetDialog,
@@ -219,16 +222,20 @@ struct ContentView: View {
 
         if timerModel.isInFlowCountUp {
             // 心流正计时模式：彩虹渐变色
-            return AnyView(ring.foregroundStyle(
-                AngularGradient(
-                    gradient: Gradient(colors: [
-                        .red, .orange, .yellow, .green, .cyan, .blue, .purple, .red
-                    ]),
-                    center: .center,
-                    startAngle: .degrees(0),
-                    endAngle: .degrees(360)
+            // AOD 模式下降低整体亮度
+            return AnyView(ring
+                .foregroundStyle(
+                    AngularGradient(
+                        gradient: Gradient(colors: [
+                            .red, .orange, .yellow, .green, .cyan, .blue, .purple, .red
+                        ]),
+                        center: .center,
+                        startAngle: .degrees(0),
+                        endAngle: .degrees(360)
+                    )
                 )
-            ))
+                .opacity(isLuminanceReduced ? 0.5 : 1.0)
+            )
         } else {
             // 普通模式：橙色；AOD 状态下降低亮度
             let ringColor = isLuminanceReduced ? Color.orange.opacity(0.5) : Color.orange
@@ -250,12 +257,17 @@ struct ContentView: View {
             }
 
             // 时间显示：心流正计时模式显示已过时间（金色），普通模式显示剩余时间
-            // watchOS 26: 在 AOD 模式下也保持 1Hz 实时更新
-            Text(timeString(time: timerModel.isInFlowCountUp ? timerModel.infiniteElapsedTime : timerModel.remainingTime))
+            // AOD 模式下使用简化格式（mm:-- 或 :ss），并降低亮度
+            let displayTime = timerModel.isInFlowCountUp ? timerModel.infiniteElapsedTime : timerModel.remainingTime
+            let timeText = isLuminanceReduced
+                ? aodTimeString(time: displayTime, isFlowMode: timerModel.isInFlowCountUp)
+                : timeString(time: displayTime)
+
+            Text(timeText)
                 .font(.system(size: 32, weight: .bold, design: .rounded))
                 .foregroundColor(timerModel.isInFlowCountUp ? .yellow : .primary)
+                .opacity(isLuminanceReduced ? 0.5 : 1.0)  // AOD 模式下降低亮度
                 .allowsHitTesting(false)
-                .privacySensitive()  // 添加隐私保护
 
             // AOD 状态下隐藏阶段指示器
             if !isLuminanceReduced {
@@ -301,6 +313,26 @@ struct ContentView: View {
         // 所有状态下都显示完整格式 "mm:ss"
         // AOD 模式下的亮度降低通过 Ring opacity 和 privacySensitive() 实现
         return formatter.string(from: TimeInterval(time)) ?? ""
+    }
+
+    // AOD 模式专用时间格式
+    private func aodTimeString(time: Int, isFlowMode: Bool) -> String {
+        if isFlowMode {
+            // 心流模式：始终显示 mm:--
+            let minutes = time / 60
+            return String(format: "%02d:--", minutes)
+        } else {
+            // 普通倒计时模式
+            if time > 60 {
+                // 剩余时间 > 1 分钟：显示 mm:--
+                let minutes = time / 60
+                return String(format: "%02d:--", minutes)
+            } else {
+                // 剩余时间 <= 1 分钟：显示 :ss
+                let seconds = time % 60
+                return String(format: ":%02d", seconds)
+            }
+        }
     }
 }
 

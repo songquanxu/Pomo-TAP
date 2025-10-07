@@ -30,10 +30,8 @@ class TimerCore: NSObject, ObservableObject {
 
         var leeway: DispatchTimeInterval {
             switch self {
-            case .normal:
-                return .milliseconds(100)  // Standard leeway for active state
-            case .aod:
-                return .milliseconds(50)   // Tighter leeway for AOD precision
+            case .normal, .aod:
+                return .seconds(1)  // 1-second leeway for both modes (battery optimization)
             }
         }
 
@@ -185,6 +183,18 @@ class TimerCore: NSObject, ObservableObject {
     // MARK: - Private Methods
     private func updateTimer() {
         guard timerRunning else { return }
+
+        // AOD 模式下的更新频率优化
+        if updateFrequency == .aod {
+            if isInFlowCountUp {
+                // 心流模式正计时：AOD 下只需每分钟更新一次（显示 mm:--）
+                if infiniteElapsedTime % 60 != 0 { return }
+            } else {
+                // 普通倒计时：剩余时间 > 60 秒时，只在整分钟更新
+                if remainingTime > 60 && remainingTime % 60 != 0 { return }
+                // 剩余时间 <= 60 秒时，每秒都更新
+            }
+        }
 
         // 检查是否需要触发定期更新（每分钟一次）
         let now = Date()
