@@ -8,6 +8,7 @@
 import SwiftUI
 import WatchKit
 import UserNotifications
+import os
 
 struct ContentView: View {
     @EnvironmentObject var timerModel: TimerModel
@@ -15,6 +16,8 @@ struct ContentView: View {
     @Environment(\.isLuminanceReduced) var isLuminanceReduced
     @State private var showResetDialog = false
     @State private var selectedTab = 0  // 当前选中的标签页
+
+    private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "ContentView")
 
     var body: some View {
         TabView(selection: $selectedTab) {
@@ -41,9 +44,12 @@ struct ContentView: View {
                 }
             }
         }
-        .onChange(of: isLuminanceReduced) { _, isAOD in
+        .onChange(of: isLuminanceReduced) { oldValue, isAOD in
             // Update timer frequency based on AOD state (watchOS 26 1Hz support)
             timerModel.timerCore.updateFrequency = isAOD ? .aod : .normal
+
+            // 调试日志：记录 AOD 状态变化
+            logger.info("🌙 AOD 状态变化: \(isAOD ? "已激活" : "已关闭") | 计时器运行: \(timerModel.timerRunning) | 会话引用计数: \(timerModel.sessionManager.sessionRetainCount)")
         }
         .task {
             await timerModel.appBecameActive()
@@ -282,9 +288,9 @@ struct ContentView: View {
                 PhaseIndicator(
                     status: timerModel.phaseCompletionStatus[index],
                     duration: timerModel.phases[index].duration,
-                    adjustedDuration: index == timerModel.currentPhaseIndex ? timerModel.adjustedPhaseDuration : nil,
+                    adjustedDuration: timerModel.phases[index].adjustedDuration ?? (index == timerModel.currentPhaseIndex ? timerModel.adjustedPhaseDuration : nil),
                     isCycleCompleted: timerModel.currentCycleCompleted && index != 0,
-                    isInFlowCountUp: timerModel.isInFlowCountUp,
+                    isInFlowCountUp: timerModel.isInFlowCountUp && index == timerModel.currentPhaseIndex,
                     infiniteElapsedTime: timerModel.infiniteElapsedTime
                 )
             }
@@ -352,34 +358,24 @@ struct PhaseIndicator: View {
 
     // 计算要显示的文本
     private var displayText: String {
-        // 如果是心流正计时模式且是当前阶段，显示金色无穷符号或实际时长
+        // 如果是心流正计时模式且是当前阶段，始终显示 ∞ 符号
         if isInFlowCountUp && status == .current {
-            // 如果已过时间为0（还未开始计时），显示∞
-            if infiniteElapsedTime == 0 {
-                return "∞"
-            }
-            // 如果已经开始计时，显示实际时长
-            let minutes = infiniteElapsedTime / 60
+            return "∞"
+        }
+
+        // 如果有调整后的时长（已完成的心流模式阶段），显示调整后的值
+        if let adjusted = adjustedDuration {
+            let minutes = adjusted / 60
             if minutes > 99 {
                 // 超过99分钟，显示小时数（向上取整）
-                let hours = (minutes + 59) / 60  // 向上取整
+                let hours = (minutes + 59) / 60
                 return "\(hours)h"
             }
             return "\(minutes)"
         }
 
-        // 普通模式：显示分钟数
-        return "\(displayDuration)"
-    }
-
-    // 计算要显示的时长（分钟数）
-    private var displayDuration: Int {
-        // 如果有调整后的时长，优先显示调整后的值
-        if let adjusted = adjustedDuration {
-            return adjusted / 60
-        }
-        // 否则显示原始时长
-        return duration / 60
+        // 普通模式：显示默认分钟数
+        return "\(duration / 60)"
     }
 
     private var color: Color {

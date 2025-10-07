@@ -282,6 +282,42 @@
         }
       }
     },
+    "NotificationPermissionDescription" : {
+      "comment" : "通知权限请求说明",
+      "extractionState" : "stale",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pomo TAP needs notification permission to alert you when each Pomodoro phase completes. This helps you stay focused and manage your time effectively."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "ポモドーロの各フェーズが完了したときに通知するため、通知権限が必要です。集中力を保ち、時間管理を効果的に行うのに役立ちます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "포모도로 각 단계가 완료될 때 알림을 보내기 위해 알림 권한이 필요합니다. 집중력을 유지하고 효과적인 시간 관리를 돕습니다."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "捏捏番茄需要通知权限来在每个番茄钟阶段完成时提醒您。这有助于您保持专注并有效管理时间。"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "捏捏番茄需要通知權限來在每個番茄鐘階段完成時提醒您。這有助於您保持專注並有效管理時間。"
+          }
+        }
+      }
+    },
     "Pause" : {
       "comment" : "暂停按钮",
       "localizations" : {

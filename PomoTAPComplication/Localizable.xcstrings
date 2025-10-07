@@ -1,12 +1,12 @@
 {
   "sourceLanguage" : "zh-Hans",
   "strings" : {
-    "%@ %@ · %@" : {
+    "%@ %@" : {
       "localizations" : {
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "new",
-            "value" : "%1$@ %2$@ · %3$@"
+            "value" : "%1$@ %2$@"
           }
         }
       }
@@ -52,7 +52,6 @@
     },
     "Completed_Cycles" : {
       "comment" : "完成的循环次数",
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -535,7 +534,6 @@
     },
     "Widget_Stats_Desc" : {
       "comment" : "统计摘要小组件描述",
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {

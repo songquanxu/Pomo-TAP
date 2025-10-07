@@ -85,6 +85,11 @@ class TimerStateManager: ObservableObject {
     func resetPhaseCompletionStatus() {
         phaseCompletionStatus = Array(repeating: .notStarted, count: phases.count)
         phaseCompletionStatus[currentPhaseIndex] = .current
+
+        // 清除所有阶段的调整后时长
+        for index in phases.indices {
+            phases[index].adjustedDuration = nil
+        }
     }
 
     func resetCycle() {
@@ -162,6 +167,7 @@ struct Phase: Codable {
     let duration: Int
     let name: String
     var status: PhaseStatus
+    var adjustedDuration: Int?  // 实际完成的时长（如果有调整或心流模式）
 }
 
 struct TimerState: Codable {

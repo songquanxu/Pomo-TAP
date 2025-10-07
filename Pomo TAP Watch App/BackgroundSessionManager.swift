@@ -8,7 +8,12 @@ import os
 class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSessionDelegate {
     // MARK: - Published Properties
     @Published private var sessionState: SessionState = .none
-    @Published private var sessionRetainCount: Int = 0
+    @Published private(set) var sessionRetainCount: Int = 0  // 改为公开只读，便于调试
+
+    // MARK: - Public Computed Properties
+    var isSessionActive: Bool {
+        extendedSession?.state == .running && sessionRetainCount > 0
+    }
 
     // MARK: - Private Properties
     private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "BackgroundSessionManager")

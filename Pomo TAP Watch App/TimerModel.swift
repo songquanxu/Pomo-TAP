@@ -11,7 +11,7 @@ class TimerModel: NSObject, ObservableObject {
     // MARK: - 管理器实例
     let timerCore: TimerCore  // Made public for AOD frequency control
     private let stateManager: TimerStateManager
-    private let sessionManager: BackgroundSessionManager
+    let sessionManager: BackgroundSessionManager  // Made public for debugging
     private let notificationManager: NotificationManager
 
     // MARK: - Published Properties (代理到各个管理器)
@@ -112,6 +112,9 @@ class TimerModel: NSObject, ObservableObject {
         // 退出心流正计时模式，获取已过时间
         let elapsedTime = timerCore.exitFlowCountUp()
         adjustedPhaseDuration = elapsedTime
+
+        // 保存到当前阶段的 adjustedDuration 字段
+        stateManager.phases[currentPhaseIndex].adjustedDuration = elapsedTime
 
         playSound(.stop)
         logger.info("心流正计时已停止，已过时间: \(elapsedTime / 60) 分钟")
@@ -272,12 +275,17 @@ class TimerModel: NSObject, ObservableObject {
 
     func appEnteredBackground() {
         // 应用进入后台时的处理
-        // 注意：不在这里停止会话！
-        // 后台会话的目的就是让计时器在后台继续运行
-        // 会话应该由 toggleTimer() 或 resetXXX() 等显式操作停止
+        // 关键修复：如果计时器未运行，立即停止后台会话
+        // 这样可以让 Apple Watch 正常进入 AOD 省电模式
+        if !timerRunning {
+            sessionManager.stopExtendedSession()
+            logger.info("应用进入后台且计时器未运行，已停止后台会话以恢复 AOD")
+        } else {
+            logger.debug("应用进入后台，计时器运行中，保持后台会话")
+        }
+
         // 更新 Widget 状态
         updateSharedState()
-        logger.debug("应用进入后台，已更新 Widget 状态")
     }
 
     // MARK: - Widget Integration
