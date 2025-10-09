@@ -11,6 +11,7 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
     // MARK: - Private Properties
     private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "NotificationManager")
     weak var timerModel: TimerModel?
+    private let repeatManager = NotificationRepeatManager()  // 重复通知管理器
 
     // MARK: - Initialization
     init(timerModel: TimerModel? = nil) {
@@ -109,10 +110,25 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
                 try await UNUserNotificationCenter.current().add(request)
                 logger.info("通知已安排: \(requestIdentifier), \(currentPhaseDuration)秒后触发")
 
+                // 如果启用了重复提醒，调度重复通知
+                if let timerModel = timerModel, timerModel.enableRepeatNotifications {
+                    await repeatManager.scheduleRepeatNotifications(
+                        initialDelay: TimeInterval(currentPhaseDuration),
+                        title: content.title,
+                        body: content.body
+                    )
+                    logger.info("已启用重复提醒功能")
+                }
+
             } catch {
                 logger.error("发送通知失败: \(error.localizedDescription)")
             }
         }
+    }
+
+    /// 取消所有重复通知
+    func cancelRepeatNotifications() async {
+        await repeatManager.cancelAllRepeatNotifications()
     }
 
     // MARK: - UNUserNotificationCenterDelegate

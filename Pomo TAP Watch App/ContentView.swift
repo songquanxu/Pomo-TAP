@@ -67,6 +67,13 @@ struct ContentView: View {
                             .padding(.top, 12)
                     }
                 }
+                .overlay(alignment: .topTrailing) {
+                    if !isLuminanceReduced {
+                        topFlowModeIndicator()
+                            .padding(.trailing, 12)
+                            .padding(.top, 12)
+                    }
+                }
                 .navigationBarHidden(true)
                 // AOD 模式下隐藏底部按钮
                 .toolbar {
@@ -170,6 +177,19 @@ struct ContentView: View {
             Text(weekdayString().prefix(3)) // 只显示周几的缩写，如 "周一"
                 .font(.system(size: 12, weight: .regular, design: .rounded))
                 .foregroundColor(.secondary)
+        }
+    }
+
+    private func topFlowModeIndicator() -> some View {
+        VStack(alignment: .trailing, spacing: 2) {
+            // 空文本占位，保持与日期视图相同的垂直结构
+            Text(" ")
+                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                .opacity(0)
+            // ∞ 符号，与星期对齐
+            Text("∞")
+                .font(.system(size: 18, weight: .light, design: .rounded))
+                .foregroundColor(timerModel.isInfiniteMode ? .yellow : .gray)
         }
     }
 

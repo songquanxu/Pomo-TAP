@@ -35,11 +35,15 @@ class TimerModel: NSObject, ObservableObject {
     @Published var isInfiniteMode: Bool = false  // 心流模式开关
     @Published var infiniteElapsedTime: Int = 0  // 心流模式下的已过时间（秒）
     @Published var isInFlowCountUp: Bool = false  // 当前是否处于心流正计时状态
+    @Published var enableRepeatNotifications: Bool = true  // 重复提醒开关（默认开启）
 
     // MARK: - Private Properties
     private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "TimerModel")
     private var hapticFeedbackTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
+
+    // MARK: - Constants
+    private let repeatNotificationsKey = "enableRepeatNotifications"  // UserDefaults 键
 
     // MARK: - Initialization
     override init() {
@@ -50,6 +54,11 @@ class TimerModel: NSObject, ObservableObject {
         self.notificationManager = NotificationManager(timerModel: nil)
 
         super.init()
+
+        // 从 UserDefaults 加载重复提醒设置
+        if let savedValue = UserDefaults.standard.object(forKey: repeatNotificationsKey) as? Bool {
+            self.enableRepeatNotifications = savedValue
+        }
 
         // 设置代理
         self.notificationManager.timerModel = self
@@ -197,6 +206,10 @@ class TimerModel: NSObject, ObservableObject {
     }
 
     func handleNotificationResponse() async {
+        // 取消所有待发送的重复通知（用户已响应）
+        await notificationManager.cancelRepeatNotifications()
+        logger.info("用户响应通知，已取消重复提醒")
+
         // 防止重复响应：如果计时器正在运行，直接返回
         if timerRunning {
             logger.warning("通知响应被忽略：计时器已在运行")
@@ -363,6 +376,13 @@ class TimerModel: NSObject, ObservableObject {
                 }
             }
         }.store(in: &cancellables)
+
+        // 监听重复提醒开关变化，保存到 UserDefaults
+        $enableRepeatNotifications.sink { [weak self] newValue in
+            guard let self = self else { return }
+            UserDefaults.standard.set(newValue, forKey: self.repeatNotificationsKey)
+            self.logger.info("重复提醒设置已保存: \(newValue)")
+        }.store(in: &cancellables)
     }
 
     private func setupTimerCallbacks() {
@@ -397,6 +417,18 @@ class TimerModel: NSObject, ObservableObject {
             logger.info("工作阶段完成，进入心流正计时模式")
             return
         }
+
+        // 普通模式：播放增强震动反馈（前台时）
+        // 3 次震动组合：快-快-停-强
+        let device = WKInterfaceDevice.current()
+        device.play(.notification)  // 第 1 次
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            device.play(.notification)  // 第 2 次
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            device.play(.success)  // 第 3 次（强调）
+        }
+        logger.info("已播放增强震动反馈（3 次震动）")
 
         // 普通模式：自动进入下一阶段，但不启动计时器
         // 用户可以通过以下方式启动：
