@@ -262,12 +262,18 @@ class TimerModel: NSObject, ObservableObject {
             cancelPendingNotifications()
         }
 
-        // Navigate to target phase
+        // Navigate to target phase and update all state bookkeeping
         stateManager.currentPhaseIndex = phaseIndex
+        stateManager.resetPhaseCompletionStatus()  // Reset all phase statuses
+        stateManager.phaseCompletionStatus[phaseIndex] = .current  // Mark target phase as current
         currentPhaseName = phases[phaseIndex].name
+        stateManager.saveState()  // Persist state to UserDefaults
 
         // Update UI state for new phase
         updateUIState()
+
+        // Sync state to widgets
+        updateSharedState()
 
         // Start timer immediately
         Task { @MainActor in
@@ -324,7 +330,9 @@ class TimerModel: NSObject, ObservableObject {
             currentPhaseName: currentPhaseName,
             lastUpdateTime: Date(),
             totalTime: totalTime,
-            phases: phases.map { PhaseInfo(duration: $0.duration, name: $0.name, status: $0.status.rawValue) },
+            phases: zip(phases, stateManager.phaseCompletionStatus).map { phase, status in
+                PhaseInfo(duration: phase.duration, name: phase.name, status: status.rawValue)
+            },
             completedCycles: stateManager.completedCycles,
             phaseCompletionStatus: completionStatus,
             hasSkippedInCurrentCycle: stateManager.hasSkippedInCurrentCycle,
@@ -377,11 +385,19 @@ class TimerModel: NSObject, ObservableObject {
             }
         }.store(in: &cancellables)
 
-        // 监听重复提醒开关变化，保存到 UserDefaults
+        // 监听重复提醒开关变化，保存到 UserDefaults 并取消已调度的通知
         $enableRepeatNotifications.sink { [weak self] newValue in
             guard let self = self else { return }
             UserDefaults.standard.set(newValue, forKey: self.repeatNotificationsKey)
             self.logger.info("重复提醒设置已保存: \(newValue)")
+
+            // 关闭开关时取消所有待发送的重复通知
+            if !newValue {
+                Task {
+                    await self.notificationManager.cancelRepeatNotifications()
+                    self.logger.info("已取消所有待发送的重复通知")
+                }
+            }
         }.store(in: &cancellables)
     }
 

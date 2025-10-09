@@ -10,22 +10,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ### Complications/Widget Design (watchOS 26+)
 - **Circular complication**: Use `.gaugeStyle(.accessoryCircularCapacity)` (closed gauge) for progress. Center icon for work phase is `wand.and.sparkles` (running) and `wand.and.stars` (paused). Use system accent color for running state, semi-transparent white for paused.
-- **Rectangular complication**: Hierarchy: top row icon+phase name (13pt), large time (24pt), system `ProgressView` for progress bar. Padding and spacing per Apple HIG. Use system rounded fonts for clarity.
-- **Corner complication**: Use `AccessoryWidgetBackground` and system `ProgressView` for curved progress arc. Center icon 24pt, label 14pt. Colors match circular style.
-- **Inline complication**: Only show emoji + time, no phase name, for glanceability.
+- **Rectangular complication**: Hierarchy: top row icon+phase name (13pt semibold), large time (24pt semibold rounded), system `ProgressView` for progress bar. Padding and spacing per Apple HIG. Use system rounded fonts for clarity.
+- **Corner complication**: Use `AccessoryWidgetBackground` and `ProgressView` (NOT Gauge) in `.widgetLabel` for curved progress arc. Center icon 24pt medium, label text 14pt semibold rounded. Colors match circular style.
+- **Inline complication**: Only show emoji + time (15pt regular rounded), no phase name, for glanceability.
 - **All icons**: Use SF Symbols. Work: `wand.and.sparkles`/`wand.and.stars`, Short Break: `cup.and.saucer.fill`/`cup.and.saucer`, Long Break: `figure.walk.motion`/`figure.walk`.
 - **Accentable**: Always use `.widgetAccentable()` for icons/images in widgets.
 - **Background**: Use `.containerBackground(.clear, for: .widget)` for all widget backgrounds.
-- **Gauge/Progress**: Never manually draw progress rings; always use system controls for gauge/progress.
-- **Font sizes**: Time display should be prominent (24pt+), phase name secondary (13pt), label text 14pt for corners.
-- **Color contrast**: Running state uses accent color (orange), paused uses semi-transparent white.
+- **Gauge/Progress**: Never manually draw progress rings; always use system controls. Use `Gauge` for Circular complications, `ProgressView` for Corner and Rectangular.
+- **Font sizes**: Circular icon 20pt medium, Rectangular title 13pt semibold, time 24pt semibold rounded, Corner icon 24pt medium, label 14pt semibold rounded, Inline text 15pt regular rounded.
+- **Color contrast**: Running state uses accent color (orange), paused uses semi-transparent white (opacity 0.6 for icons, 0.4 for gauge tint).
 
 ### Notification & Timer Logic
-- **Phase transition**: When a Pomodoro cycle ends, always auto-advance to the next phase, but do NOT auto-start timer unless user clicks notification or start button (or triggers via Complication deep link).
+- **Phase transition**: When a Pomodoro phase ends, always auto-advance to the next phase. Do NOT auto-start timer - let user decide via system notification button or manual start button.
 - **Notification response**: If already in new phase and timer not running, only start timer; do not advance phase again (idempotent logic).
 - **Timer implementation**: Use `DispatchSourceTimer` for countdown/countup, never Foundation `Timer`.
-- **Flow mode (心流模式)**: Only activates for Work phase after countdown completes. Enter count-up mode automatically, no notification. Stop button records elapsed time and advances phase.
-- **Digital Crown**: Only allow time adjustment when timer is running. Use `.focusable()` before `.digitalCrownRotation()`; range must be fixed constants.
+- **Flow mode (心流模式)**: Only activates for Work phase after countdown completes. Enter count-up mode automatically, no notification. Stop button records elapsed time and auto-starts next phase.
+- **Digital Crown**: **NOT IMPLEMENTED** - Feature described in documentation but not present in current codebase. Future enhancement to allow time adjustment when timer is running.
 
 ### General Best Practices
 - **Strictly follow Apple HIG and latest APIs (watchOS 26+)**
@@ -156,20 +156,15 @@ All managers are `@MainActor` to ensure thread safety. State synchronization hap
     - **Update frequency optimization**: Minute-level updates when >60s remaining, second-level when ≤60s
     - Wrist state detection via `WristStateManager` + `isLuminanceReduced` for optimal UI state
   - **watchOS 26 native `.toolbar()` API** for bottom controls (requires NavigationStack wrapper)
-  - **Digital Crown control** - Use `.focusable()` and `.digitalCrownRotation()` to adjust remaining time during countdown
-    - **ONLY active when timer is RUNNING** (not paused/stopped)
-    - Rotates to adjust remaining time by 1-minute increments
-    - **Up rotation**: increases remaining time (extends current phase)
-    - **Down rotation**: decreases remaining time (shortens current phase)
-    - **Lower limit**: Cannot go below 0 (triggers skip dialog when reaching 0)
-    - **Upper limit**: No limit (max constrained by Digital Crown range of 7200 seconds)
-    - **Skip dialog behavior** when remaining time reaches 0:
-      - "Skip Phase" button: marks phase as skipped, moves to next phase
-      - "Cancel" button: sets phase duration to elapsed time rounded up to nearest minute (e.g., 1m3s → 2m), then completes phase
-    - Updates phase indicator number and timer ring proportion in real-time
-    - Example: Phase with 15 min remaining → rotate down 5 min → 10 min remaining ✅
-    - **Adjustment applies ONLY to current phase** (does not affect future phases)
-    - **Phase duration resets to default when starting new cycle**
+  - **Bottom toolbar buttons**:
+    - **Left button**: Reset (40pt circular, gray background, arrow.counterclockwise icon 16pt semibold)
+    - **Right button**: Start/Pause/Stop (40pt circular, orange/yellow background, icon 18pt bold)
+      - Normal mode: play.fill (start) / pause.fill (pause)
+      - Flow mode: stop.fill (stop)
+  - **Digital Crown control** - **NOT IMPLEMENTED** in current version
+    - Feature described in documentation for future enhancement
+    - Would allow time adjustment during countdown when timer is running
+    - Planned features: 1-minute increments, skip dialog at 0, real-time UI updates
   - Ring-based progress visualization:
     - Background ring (opacity 0.2)
     - Tomato ring (orange in normal mode, yellow in infinite mode) - main progress indicator
@@ -209,31 +204,19 @@ All managers are `@MainActor` to ensure thread safety. State synchronization hap
    - Enables quick control via double tap gesture (pinch index finger and thumb twice)
    - Available on watchOS 10+ with supported hardware
 
-4. **Phase Duration Adjustment** - Dynamic phase customization during countdown
-   - Digital Crown adjusts remaining time when timer is RUNNING
-   - **Active state**: Only works while timer is counting down (not paused/stopped)
-   - **Adjustment range**:
-     - Lower bound: 0 seconds (triggers skip confirmation dialog)
-     - Upper bound: Unlimited (constrained by Digital Crown max range 7200s / 120min)
-   - **Skip confirmation dialog**:
-     - Triggered when remaining time reaches 0 via Digital Crown
-     - User choice "Skip Phase": marks phase as skipped, advances to next phase
-     - User choice "Cancel": rounds elapsed time up to nearest minute, sets as phase duration, completes phase immediately
-   - Phase indicator displays adjusted duration in real-time
-   - Timer ring proportion updates immediately
-   - `adjustedPhaseDuration` property tracks current phase's modified duration
-   - **Implementation**: `TimerModel.adjustTime(by:)` directly modifies `remainingTime`, updates `totalTime` accordingly
-   - **Resets to default duration when entering new cycle**
+4. **Phase Duration Adjustment** - **NOT IMPLEMENTED**
+   - Feature described in documentation but not present in current codebase
+   - Planned feature: Digital Crown adjusts remaining time when timer is running
+   - Would allow dynamic phase customization during countdown
+   - Future implementation would include skip confirmation dialog and real-time UI updates
 
-5. **Enhanced Phase Completion Alerts** - Haptic-based notification system
-   - **Background Mode**: Standard system notification with `.timeSensitive` interruption level
-   - **Foreground Mode**: Custom in-app haptic alert pattern
-     - Pattern: Two quick taps → 0.5s pause → One success tap
-     - Uses `.notification` and `.success` haptic types
-     - Creates distinct, unmistakable alert pattern different from other notifications
+5. **Enhanced Phase Completion Alerts** - Unified system notification approach
+   - **All Modes**: Standard system notification with `.timeSensitive` interruption level
+   - Displays in both foreground and background (unified experience)
+   - Notification banner appears with "立即开始" action button
+   - Battery-optimized: pre-scheduled via `UNTimeIntervalNotificationTrigger`
+   - No custom in-app dialogs or haptic patterns (removed for simplicity)
    - **watchOS Limitation**: System sounds not supported (AudioToolbox unavailable on watchOS)
-   - Automatic detection of app state to choose appropriate alert method
-   - Callback-based architecture ensures alerts trigger precisely when phase completes
 
 6. **Flow Mode (心流模式)** - Smart continuous work mode for deep focus
    - **Settings Toggle**: Enable/disable via settings page (infinity symbol ∞)
@@ -781,28 +764,19 @@ Follow the existing `.cursorrules`:
    - **Avoid**: ZStack + `.position()` with manual coordinate calculations
    - **Why**: overlay handles safe areas and dynamic sizing automatically
 
-8. **Critical - Digital Crown Time Adjustment Logic:**
-   - **Active state**: Digital Crown ONLY works when `timerRunning == true`
-   - **Direct adjustment**: Modifies `remainingTime` directly, not `totalTime`
-   - **Logic flow in `adjustTime(by:)`**:
-     1. Calculate `newRemainingTime = remainingTime + delta`
-     2. Check lower bound: if `<= 0`, show skip dialog and return
-     3. Update `remainingTime` and `timerCore.remainingTime`
-     4. Recalculate `totalTime = elapsedTime + newRemainingTime`
-     5. Update `adjustedPhaseDuration = totalTime`
-   - **Skip dialog state**: Use `@Published var showSkipPhaseDialog: Bool` in TimerModel
-   - **Skip confirmation methods**:
-     - `confirmSkipPhase()`: Mark as skipped, advance to next phase
-     - `cancelSkipPhase()`: Round elapsed time up to nearest minute, complete current phase
-   - **NEVER**: Adjust time when timer is paused/stopped
-   - **NEVER**: Reset these values in `startTimer()` (may have been adjusted by user)
+8. **Digital Crown Time Adjustment Logic - NOT IMPLEMENTED:**
+   - Feature described in documentation but not present in current codebase
+   - Planned for future implementation to allow dynamic phase time adjustment
+   - Would include: active state detection, skip dialog, real-time UI updates
+   - Reference implementation details preserved in documentation for future development
 
 9. **Phase Completion Callback Pattern:**
    - TimerCore provides `onPhaseCompleted` closure property
    - TimerModel sets callback in `setupTimerCallbacks()` during initialization
-   - Callback triggers `handlePhaseCompletion()` which checks app state
-   - Foreground: plays custom in-app haptic pattern (watchOS doesn't support custom sounds)
-   - Background: relies on system notification (already scheduled)
+   - Callback triggers `handlePhaseCompletion()` which auto-advances to next phase
+   - Normal mode: auto-advance without auto-start, user controls start via notification/button
+   - Flow mode: enters count-up automatically for Work phases
+   - Relies on pre-scheduled system notifications for alerts
 
 10. **Flow Mode State Management:**
    - **Two-level state system**:

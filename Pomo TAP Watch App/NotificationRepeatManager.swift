@@ -35,13 +35,14 @@ class NotificationRepeatManager: ObservableObject {
             // 先取消所有待发送的重复通知
             await cancelAllRepeatNotifications()
 
-            // 调度 3 次重复通知
+            // 调度 3 次重复通知（在主通知之后）
             for index in 0..<repeatCount {
                 // 计算每次通知的延迟时间
-                // 第 0 次：initialDelay（例如 1500 秒，即 25 分钟）
-                // 第 1 次：initialDelay + 60 秒
-                // 第 2 次：initialDelay + 120 秒
-                let delay = initialDelay + (TimeInterval(index) * repeatInterval)
+                // 主通知在 initialDelay 时触发
+                // 第 0 次重复：initialDelay + 60 秒（主通知后 1 分钟）
+                // 第 1 次重复：initialDelay + 120 秒（主通知后 2 分钟）
+                // 第 2 次重复：initialDelay + 180 秒（主通知后 3 分钟）
+                let delay = initialDelay + (TimeInterval(index + 1) * repeatInterval)
 
                 // 创建通知内容
                 let content = UNMutableNotificationContent()

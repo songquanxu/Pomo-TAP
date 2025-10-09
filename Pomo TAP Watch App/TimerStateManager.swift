@@ -136,10 +136,10 @@ class TimerStateManager: ObservableObject {
     // MARK: - Private Methods
     private func initializeDefaultPhases() {
         phases = [
-            Phase(duration: 25 * 60, name: "Work", status: .current),
-            Phase(duration: 5 * 60, name: "Short Break", status: .notStarted),
-            Phase(duration: 25 * 60, name: "Work", status: .notStarted),
-            Phase(duration: 15 * 60, name: "Long Break", status: .notStarted)
+            Phase(duration: 25 * 60, name: "Work"),
+            Phase(duration: 5 * 60, name: "Short Break"),
+            Phase(duration: 25 * 60, name: "Work"),
+            Phase(duration: 15 * 60, name: "Long Break")
         ]
     }
 
@@ -166,7 +166,6 @@ enum PhaseStatus: String, Codable {
 struct Phase: Codable {
     let duration: Int
     let name: String
-    var status: PhaseStatus
     var adjustedDuration: Int?  // 实际完成的时长（如果有调整或心流模式）
 }
 

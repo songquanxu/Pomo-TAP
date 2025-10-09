@@ -78,7 +78,15 @@ struct SmartStackProvider: TimelineProvider {
                 }
 
                 let futureRemainingTime = remainingSeconds - (minuteOffset * 60)
-                let futureProgress = 1.0 - Double(futureRemainingTime) / Double(currentEntry.remainingTime + (Int(currentEntry.progress * Double(currentEntry.remainingTime)) / (1 - Int(currentEntry.progress))))
+
+                // Calculate total time from current progress and remaining time
+                // totalTime = remainingTime / (1 - progress)
+                // Avoid division by zero when progress approaches 1.0
+                let totalTime = currentEntry.progress < 0.99
+                    ? Int(Double(currentEntry.remainingTime) / (1.0 - currentEntry.progress))
+                    : currentEntry.remainingTime
+
+                let futureProgress = 1.0 - Double(futureRemainingTime) / Double(totalTime)
 
                 let entry = SmartStackEntry(
                     date: futureDate,
