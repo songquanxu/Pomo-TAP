@@ -28,7 +28,6 @@ class TimerModel: NSObject, ObservableObject {
     // MARK: - 其他UI状态
     @Published var adjustedPhaseDuration: Int = 0  // 当前阶段调整后的时长（秒）
     @Published var currentCycleCompleted = false
-    @Published var tomatoRingPosition: Angle = .zero
     @Published var isTransitioning = false
     @Published var transitionProgress: CGFloat = 0
     @Published var isInResetMode: Bool = false
@@ -39,7 +38,6 @@ class TimerModel: NSObject, ObservableObject {
 
     // MARK: - Private Properties
     private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "TimerModel")
-    private var hapticFeedbackTimer: Timer?
     private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Constants
@@ -151,9 +149,6 @@ class TimerModel: NSObject, ObservableObject {
         timerCore.remainingTime = duration
         timerCore.totalTime = duration
 
-        // 重置UI状态
-        updateTomatoRingPosition()
-
         playSound(.retry)
         logger.info("当前阶段已重置")
     }
@@ -172,9 +167,6 @@ class TimerModel: NSObject, ObservableObject {
     }
 
     func moveToNextPhase(autoStart: Bool, skip: Bool = false) async {
-        // 重置通知状态
-        notificationSent = false
-
         // 清除暂停状态，避免新阶段使用旧的剩余时间
         timerCore.clearPausedState()
 
@@ -190,9 +182,6 @@ class TimerModel: NSObject, ObservableObject {
 
         // 更新UI状态
         updateUIState()
-
-        // 重置番茄环的位置
-        tomatoRingPosition = .zero
 
         // 保存状态
         stateManager.saveState()
@@ -452,7 +441,6 @@ class TimerModel: NSObject, ObservableObject {
         timerCore.remainingTime = initialDuration
         timerCore.totalTime = initialDuration
         currentPhaseName = phases.first?.name ?? "Work"
-        updateTomatoRingPosition()
     }
 
     private func startTimer() async {
@@ -496,18 +484,11 @@ class TimerModel: NSObject, ObservableObject {
         timerCore.remainingTime = duration
         timerCore.totalTime = duration
         currentPhaseName = phases[currentPhaseIndex].name
-        updateTomatoRingPosition()
     }
 
     private func resetUIState() {
         currentCycleCompleted = false
-        tomatoRingPosition = .zero
         isInResetMode = false
-    }
-
-    func updateTomatoRingPosition() {
-        let progress = 1 - Double(remainingTime) / Double(totalTime)
-        tomatoRingPosition = Angle(degrees: 360 * progress)
     }
 
     private func playSound(_ soundType: WKHapticType) {
@@ -524,6 +505,4 @@ class TimerModel: NSObject, ObservableObject {
     var currentPhase: Phase {
         return phases[currentPhaseIndex]
     }
-
-    var notificationSent = false
 }
