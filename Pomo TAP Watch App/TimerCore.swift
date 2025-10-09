@@ -180,19 +180,33 @@ class TimerCore: NSObject, ObservableObject {
         return elapsed
     }
 
+    func syncTimerStateFromSystemTime() {
+        // 从系统时间同步计时器状态 (用于 AOD 恢复时修正显示偏差)
+        guard timerRunning, !isInFlowCountUp, let endTime = endTime else { return }
+
+        let now = Date()
+        let newRemainingTime = max(Int(ceil(endTime.timeIntervalSince(now))), 0)
+
+        if newRemainingTime != remainingTime {
+            logger.info("🔄 AOD 恢复同步: \(self.remainingTime) → \(newRemainingTime) 秒")
+            remainingTime = newRemainingTime
+        }
+    }
+
     // MARK: - Private Methods
     private func updateTimer() {
         guard timerRunning else { return }
 
-        // AOD 模式下的更新频率优化
+        // AOD 模式下的更新频率优化（节电策略）
         if updateFrequency == .aod {
             if isInFlowCountUp {
                 // 心流模式正计时：AOD 下只需每分钟更新一次（显示 mm:--）
                 if infiniteElapsedTime % 60 != 0 { return }
             } else {
-                // 普通倒计时：剩余时间 > 60 秒时，只在整分钟更新
+                // 普通倒计时：
+                // - 剩余时间 > 60 秒：只在整分钟更新（节电 96%）
+                // - 剩余时间 ≤ 60 秒：每秒都更新（确保最后 1 分钟准确显示）
                 if remainingTime > 60 && remainingTime % 60 != 0 { return }
-                // 剩余时间 <= 60 秒时，每秒都更新
             }
         }
 

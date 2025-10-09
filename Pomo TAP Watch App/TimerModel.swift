@@ -128,8 +128,8 @@ class TimerModel: NSObject, ObservableObject {
         playSound(.stop)
         logger.info("心流正计时已停止，已过时间: \(elapsedTime / 60) 分钟")
 
-        // 进入下一个阶段
-        await moveToNextPhase(autoStart: false, skip: false)
+        // 进入下一个阶段并自动启动计时器
+        await moveToNextPhase(autoStart: true, skip: false)
 
         updateSharedState()  // 更新 Widget
     }
@@ -418,27 +418,12 @@ class TimerModel: NSObject, ObservableObject {
             return
         }
 
-        // 普通模式：播放增强震动反馈（前台时）
-        // 3 次震动组合：快-快-停-强
-        let device = WKInterfaceDevice.current()
-        device.play(.notification)  // 第 1 次
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            device.play(.notification)  // 第 2 次
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
-            device.play(.success)  // 第 3 次（强调）
-        }
-        logger.info("已播放增强震动反馈（3 次震动）")
-
-        // 普通模式：自动进入下一阶段，但不启动计时器
-        // 用户可以通过以下方式启动：
-        // 1. 点击通知中的"立即开始"按钮
-        // 2. 手动点击主界面的开始按钮
-        // 3. 从 Complications 小组件触发
+        // 普通模式：自动进入下一阶段（不启动计时器）
+        // 系统通知会在阶段完成时触发，用户点击"立即开始"后启动新阶段计时器
         Task {
             await moveToNextPhase(autoStart: false)
             playSound(.notification)
-            logger.info("阶段完成，已自动进入下一阶段（未启动计时器）")
+            logger.info("阶段完成，已自动进入下一阶段（等待用户启动）")
         }
     }
 

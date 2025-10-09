@@ -48,6 +48,12 @@ struct ContentView: View {
             // Update timer frequency based on AOD state (watchOS 26 1Hz support)
             timerModel.timerCore.updateFrequency = isAOD ? .aod : .normal
 
+            // AOD 恢复时，从系统时间同步计时器状态，修正显示偏差
+            if oldValue == true && isAOD == false {
+                timerModel.timerCore.syncTimerStateFromSystemTime()
+                logger.info("🔄 AOD 恢复，已同步计时器状态")
+            }
+
             // 调试日志：记录 AOD 状态变化
             logger.info("🌙 AOD 状态变化: \(isAOD ? "已激活" : "已关闭") | 计时器运行: \(timerModel.timerRunning) | 会话引用计数: \(timerModel.sessionManager.sessionRetainCount)")
         }
