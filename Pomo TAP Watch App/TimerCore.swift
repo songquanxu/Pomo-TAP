@@ -197,21 +197,61 @@ class TimerCore: NSObject, ObservableObject {
     private func updateTimer() {
         guard timerRunning else { return }
 
-        // AOD 模式下的更新频率优化（节电策略）
-        if updateFrequency == .aod {
-            if isInFlowCountUp {
-                // 心流模式正计时：AOD 下只需每分钟更新一次（显示 mm:--）
+        let now = Date()
+
+        // CRITICAL FIX: Always update internal state first, before any AOD throttling
+        // AOD throttling should ONLY affect UI update frequency, NOT timer logic
+        // This fixes the bug where early return prevented state updates and phase completion
+
+        if isInFlowCountUp {
+            // 心流正计时：基于系统时间计算已过时间
+            guard let startTime = startTime else { return }
+            let elapsed = Int(now.timeIntervalSince(startTime))
+
+            // 始终更新内部状态（即使在 AOD 模式下也必须更新）
+            if elapsed != infiniteElapsedTime {
+                infiniteElapsedTime = elapsed
+                logger.debug("心流正计时已过时间: \(elapsed) 秒")
+            }
+
+            // AOD 节流：仅影响 UI 更新频率，不影响状态计算
+            // 在 AOD 下，只在整分钟时继续执行（触发 UI 更新），其他时候提前返回
+            if updateFrequency == .aod {
                 if infiniteElapsedTime % 60 != 0 { return }
-            } else {
-                // 普通倒计时：
-                // - 剩余时间 > 60 秒：只在整分钟更新（节电 96%）
-                // - 剩余时间 ≤ 60 秒：每秒都更新（确保最后 1 分钟准确显示）
+            }
+
+        } else {
+            // 普通倒计时：基于系统时间计算剩余时间
+            guard let endTime = endTime else { return }
+            let newRemainingTime = max(Int(ceil(endTime.timeIntervalSince(now))), 0)
+
+            // 始终更新内部状态（即使在 AOD 模式下也必须更新）
+            if newRemainingTime != self.remainingTime {
+                let previousTime = self.remainingTime
+                self.remainingTime = newRemainingTime
+
+                // 如果时间到达零，停止计时器并触发回调
+                if newRemainingTime == 0 {
+                    stopTimer()
+                    logger.info("计时器自然结束")
+                    onPhaseCompleted?()
+                    return  // 阶段完成，直接返回
+                } else if abs(previousTime - newRemainingTime) > 1 {
+                    // 如果时间跳跃较大，记录日志（可能发生了系统休眠等情况）
+                    logger.debug("时间更新: \(previousTime) -> \(newRemainingTime)")
+                }
+            }
+
+            // AOD 节流：仅影响 UI 更新频率，不影响状态计算
+            // 在 AOD 下：
+            // - 剩余时间 > 60 秒：只在整分钟时继续执行（节电 96%）
+            // - 剩余时间 ≤ 60 秒：每秒都继续执行（确保最后 1 分钟准确显示）
+            if updateFrequency == .aod {
                 if remainingTime > 60 && remainingTime % 60 != 0 { return }
             }
         }
 
-        // 检查是否需要触发定期更新（每分钟一次）
-        let now = Date()
+        // 检查是否需要触发定期更新（每分钟一次，用于 Widget 同步）
         if let lastUpdate = lastPeriodicUpdateTime {
             if now.timeIntervalSince(lastUpdate) >= 60 {
                 lastPeriodicUpdateTime = now
@@ -219,38 +259,6 @@ class TimerCore: NSObject, ObservableObject {
             }
         } else {
             lastPeriodicUpdateTime = now
-        }
-
-        if isInFlowCountUp {
-            // 心流正计时：正计时
-            guard let startTime = startTime else { return }
-            let elapsed = Int(now.timeIntervalSince(startTime))
-
-            if elapsed != infiniteElapsedTime {
-                infiniteElapsedTime = elapsed
-                logger.debug("心流正计时已过时间: \(elapsed) 秒")
-            }
-        } else {
-            // 普通模式：倒计时
-            guard let endTime = endTime else { return }
-            let newRemainingTime = max(Int(ceil(endTime.timeIntervalSince(now))), 0)
-
-            // 只有当时间发生变化时才更新
-            if newRemainingTime != self.remainingTime {
-                let previousTime = self.remainingTime
-                self.remainingTime = newRemainingTime
-
-                // 如果时间到达零，停止计时器
-                if newRemainingTime == 0 {
-                    stopTimer()
-                    logger.info("计时器自然结束")
-                    // 触发阶段完成回调
-                    onPhaseCompleted?()
-                } else if abs(previousTime - newRemainingTime) > 1 {
-                    // 如果时间跳跃较大，记录日志（可能发生了系统休眠等情况）
-                    logger.debug("时间更新: \(previousTime) -> \(newRemainingTime)")
-                }
-            }
         }
     }
 }
