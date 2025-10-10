@@ -9,6 +9,7 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
     // MARK: - Published Properties
     @Published private var sessionState: SessionState = .none
     @Published private(set) var sessionRetainCount: Int = 0  // 改为公开只读，便于调试
+    @Published private var pendingRetainRequests: Int = 0  // 记录尚未完成的启动请求
 
     // MARK: - Public Computed Properties
     var isSessionActive: Bool {
@@ -18,7 +19,7 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
     // MARK: - Private Properties
     private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "BackgroundSessionManager")
     private var extendedSession: WKExtendedRuntimeSession?
-    private var isStarting = false // 互斥锁：防止并发启动
+    private var isStarting = false // 互斥锁：防止并发启动（直到系统回调才重置）
 
     // MARK: - Session State Enum
     private enum SessionState {
@@ -41,25 +42,25 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
 
     // MARK: - Public Methods
     func startExtendedSession() async {
-        // 防止并发启动
-        guard !isStarting else {
-            logger.warning("会话正在启动中，忽略重复请求")
-            return
-        }
-
-        // 检查是否已经有一个有效的会话在运行
+        // 如果会话已在运行，只增加引用计数即可
         if let currentSession = extendedSession, currentSession.state == .running {
             sessionRetainCount += 1
             logger.debug("会话已在运行，增加引用计数: \(self.sessionRetainCount)")
             return
         }
 
-        // 设置互斥锁
-        isStarting = true
-        defer { isStarting = false }
+        // 记录一次新的启动请求
+        pendingRetainRequests += 1
+        logger.debug("收到扩展会话启动请求，挂起请求数: \(self.pendingRetainRequests)")
 
-        // 增加引用计数
-        sessionRetainCount += 1
+        // 防止并发启动
+        guard !isStarting else {
+            logger.debug("会话正在启动中，等待当前启动完成")
+            return
+        }
+
+        // 检查是否已经有一个有效的会话在运行
+        isStarting = true
 
         // 必须先完全清理现有会话（无论状态如何）
         if let existingSession = extendedSession {
@@ -75,10 +76,18 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
             logger.debug("会话清理等待完成")
         }
 
+        // 如果所有挂起请求都已取消，则无需继续启动
+        guard pendingRetainRequests > 0 else {
+            logger.debug("挂起请求已清空，取消启动流程")
+            isStarting = false
+            return
+        }
+
         // 再次检查是否已有会话（防止竞态条件）
         guard extendedSession == nil else {
             logger.warning("清理后仍存在会话，取消启动")
-            sessionRetainCount -= 1
+            pendingRetainRequests = max(pendingRetainRequests - 1, 0)
+            isStarting = false
             return
         }
 
@@ -92,7 +101,7 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
 
         // 启动会话（同步调用，但系统需要时间异步启动）
         session.start()
-        logger.info("已请求启动扩展会话（引用计数: \(self.sessionRetainCount)）")
+        logger.info("已请求启动扩展会话（挂起请求: \(self.pendingRetainRequests)）")
 
         // CRITICAL FIX: 等待系统实际启动会话，防止"only single session allowed"错误
         // 系统需要时间处理启动请求，如果立即返回可能导致下次调用时检测到"会话冲突"
@@ -101,6 +110,23 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
     }
 
     func stopExtendedSession() {
+        // 如果会话仍在启动过程中，优先减少挂起请求
+        if sessionState == .starting || isStarting {
+            if pendingRetainRequests > 0 {
+                pendingRetainRequests -= 1
+                logger.debug("会话启动过程中收到停止请求，挂起请求剩余: \(self.pendingRetainRequests)")
+            }
+
+            // 如果没有挂起请求且已经创建了会话，则主动取消
+            if pendingRetainRequests == 0, let session = extendedSession {
+                logger.info("无挂起请求，取消启动中的扩展会话")
+                if session.state == .running || session.state == .notStarted {
+                    session.invalidate()
+                }
+            }
+            return
+        }
+
         guard sessionRetainCount > 0 else {
             logger.debug("引用计数已为0，无需停止会话")
             return
@@ -140,7 +166,17 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
                 return
             }
 
+            // 完成启动流程
             self.sessionState = .running
+            let requestCount = self.pendingRetainRequests
+            if requestCount == 0 {
+                self.logger.warning("启动回调时挂起请求为空，使用回退引用计数")
+                self.sessionRetainCount = max(self.sessionRetainCount, 1)
+            } else {
+                self.sessionRetainCount += requestCount
+            }
+            self.pendingRetainRequests = 0
+            self.isStarting = false
             self.logger.info("✅ 会话成功启动（引用计数: \(self.sessionRetainCount)）")
         }
     }
@@ -169,6 +205,13 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
             self.logger.info("❌ 会话已失效 - 原因: \(reasonText), 错误: \(errorDescription)")
 
             // 更新状态并清理引用
+            if self.sessionState == .starting {
+                // 启动失败，清空挂起请求
+                self.pendingRetainRequests = 0
+                self.isStarting = false
+            } else {
+                self.sessionRetainCount = 0
+            }
             self.sessionState = .invalid
             self.extendedSession = nil
 
@@ -177,7 +220,7 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
             // 1. 避免无限重启循环
             // 2. 会话失效通常意味着应用不再需要后台执行
             // 3. 如果需要后台执行，应由计时器逻辑主动调用 startExtendedSession()
-            self.logger.debug("会话已清理，引用计数: \(self.sessionRetainCount)")
+            self.logger.debug("会话已清理，引用计数: \(self.sessionRetainCount)，挂起请求: \(self.pendingRetainRequests)")
         }
     }
 
