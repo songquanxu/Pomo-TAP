@@ -57,16 +57,15 @@ struct Pomo_TAPApp: App {
                 }
                 .task {
                     // 在视图加载后检查权限
-                    await permissionManager.checkNotificationPermission { status in
-                        switch status {
-                        case .notDetermined:
-                            // 使用TimerModel中的NotificationManager
-                            timerModel.requestNotificationPermission()
-                        case .denied:
-                            showNotificationPermissionAlert = true
-                        default:
-                            break
-                        }
+                    let status = await permissionManager.checkNotificationPermission()
+                    switch status {
+                    case .notDetermined:
+                        // 使用TimerModel中的NotificationManager
+                        timerModel.requestNotificationPermission()
+                    case .denied:
+                        showNotificationPermissionAlert = true
+                    default:
+                        break
                     }
                 }
         }
@@ -101,11 +100,9 @@ struct Pomo_TAPApp: App {
 
 // 权限管理器
 private actor PermissionManager {
-    func checkNotificationPermission(completion: @escaping (UNAuthorizationStatus) -> Void) async {
+    func checkNotificationPermission() async -> UNAuthorizationStatus {
         let settings = await UNUserNotificationCenter.current().notificationSettings()
-        await MainActor.run {
-            completion(settings.authorizationStatus)
-        }
+        return settings.authorizationStatus
     }
 }
 

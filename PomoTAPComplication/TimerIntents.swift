@@ -12,8 +12,10 @@ import WatchKit
 
 // MARK: - Toggle Timer Intent
 struct ToggleTimerIntent: AppIntent {
-    static var title: LocalizedStringResource = "Toggle Timer"
-    static var description = IntentDescription("Start or pause the Pomodoro timer")
+    static var title: LocalizedStringResource { "Toggle Timer" }
+    static var description: IntentDescription {
+        IntentDescription("Start or pause the Pomodoro timer")
+    }
 
     func perform() async throws -> some IntentResult {
         // Open app with toggle action
@@ -37,8 +39,10 @@ struct ToggleTimerIntent: AppIntent {
 
 // MARK: - Skip Phase Intent (Optional)
 struct SkipPhaseIntent: AppIntent {
-    static var title: LocalizedStringResource = "Skip Phase"
-    static var description = IntentDescription("Skip to the next Pomodoro phase")
+    static var title: LocalizedStringResource { "Skip Phase" }
+    static var description: IntentDescription {
+        IntentDescription("Skip to the next Pomodoro phase")
+    }
 
     func perform() async throws -> some IntentResult {
         guard let url = URL(string: "pomoTAP://skipPhase") else {

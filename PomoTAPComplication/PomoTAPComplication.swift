@@ -61,7 +61,11 @@ struct Provider: TimelineProvider {
                 return
             }
 
-            let entries = timelineEntries(from: currentEntry)
+            let highFrequency = currentEntry.state.isRunning && currentEntry.state.displayMode == .countdown
+            let entries = timelineEntries(
+                from: currentEntry,
+                prefersHighFrequencyUpdates: highFrequency
+            )
             completion(Timeline(entries: entries, policy: .atEnd))
         } catch {
             logger.error("生成时间线失败: \(error.localizedDescription)")
@@ -70,14 +74,14 @@ struct Provider: TimelineProvider {
     }
 
     // MARK: - Timeline helpers
-    private func timelineEntries(from entry: ComplicationEntry) -> [ComplicationEntry] {
+    private func timelineEntries(
+        from entry: ComplicationEntry,
+        prefersHighFrequencyUpdates: Bool
+    ) -> [ComplicationEntry] {
         var entries: [ComplicationEntry] = [entry]
         let calendar = Calendar.current
         let now = entry.date
         let state = entry.state
-
-        let appState = WKExtension.shared().applicationState
-        let isActiveOrForeground = (appState == .active || appState == .inactive)
 
         if state.displayMode == .flow {
             // 心流模式：每分钟更新，最多 30 分钟
@@ -94,7 +98,7 @@ struct Provider: TimelineProvider {
             }
         } else {
             let remainingSeconds = state.countdownRemaining
-            let intervals = isActiveOrForeground
+            let intervals = prefersHighFrequencyUpdates
                 ? generateActiveModeIntervals(remainingSeconds: remainingSeconds)
                 : generateAODModeIntervals(remainingSeconds: remainingSeconds)
 

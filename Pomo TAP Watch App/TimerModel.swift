@@ -41,6 +41,7 @@ class TimerModel: NSObject, ObservableObject {
     // MARK: - Private Properties
     private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "TimerModel")
     private var cancellables = Set<AnyCancellable>()
+    private var transitionTimer: Timer?
 
     // MARK: - Constants
     private let repeatNotificationsKey = "enableRepeatNotifications"  // UserDefaults 键
@@ -86,6 +87,10 @@ class TimerModel: NSObject, ObservableObject {
 
         // 初始化默认状态
         initializeState()
+    }
+
+    @MainActor deinit {
+        transitionTimer?.invalidate()
     }
 
     // MARK: - Public Methods
@@ -487,15 +492,22 @@ class TimerModel: NSObject, ObservableObject {
         isTransitioning = true
         transitionProgress = 0
 
-        Timer.scheduledTimer(withTimeInterval: 0.05, repeats: true) { [weak self] timer in
-            Task { @MainActor [weak self] in
-                guard let self = self else { timer.invalidate(); return }
-                self.transitionProgress += 0.1
-                if self.transitionProgress >= 1 {
-                    self.isTransitioning = false
-                    timer.invalidate()
-                }
-            }
+        transitionTimer?.invalidate()
+        transitionTimer = Timer.scheduledTimer(
+            timeInterval: 0.05,
+            target: self,
+            selector: #selector(handleTransitionTick(_:)),
+            userInfo: nil,
+            repeats: true
+        )
+    }
+
+    @objc private func handleTransitionTick(_ timer: Timer) {
+        transitionProgress += 0.1
+        if transitionProgress >= 1 {
+            isTransitioning = false
+            timer.invalidate()
+            transitionTimer = nil
         }
     }
 
