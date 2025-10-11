@@ -193,7 +193,7 @@ struct ContentView: View {
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
                 .opacity(0)
             // ∞ 符号，与星期对齐
-            Text("∞")
+            Text(NSLocalizedString("∞", comment: ""))
                 .font(.system(size: 18, weight: .light, design: .rounded))
                 .foregroundColor(timerModel.isInfiniteMode ? .yellow : .gray)
         }
@@ -282,7 +282,12 @@ struct ContentView: View {
                 HStack() {
                     Image(systemName: "medal.fill")
                         .foregroundColor(timerModel.hasSkippedInCurrentCycle ? .green : .orange)
-                    Text("×\(timerModel.completedCycles)")
+                    Text(
+                        String(
+                            format: NSLocalizedString("×%lld", comment: ""),
+                            Int64(timerModel.completedCycles)
+                        )
+                    )
                         .font(.system(size: 14))
                         .foregroundColor(timerModel.hasSkippedInCurrentCycle ? .green : .orange)
                 }
@@ -386,7 +391,7 @@ struct PhaseIndicator: View {
     private var displayText: String {
         // 如果是心流正计时模式且是当前阶段，始终显示 ∞ 符号
         if isInFlowCountUp && status == .current {
-            return "∞"
+            return NSLocalizedString("∞", comment: "")
         }
 
         // 如果有调整后的时长（已完成的心流模式阶段），显示调整后的值

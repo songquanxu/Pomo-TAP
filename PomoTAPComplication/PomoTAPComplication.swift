@@ -231,7 +231,7 @@ struct CircularComplicationView: View {
             Gauge(value: min(Double(entry.state.flowElapsed) / Double(max(entry.state.totalDuration, 1)), 1.0), in: 0...1) {
             } currentValueLabel: {
                 VStack(spacing: 2) {
-                    Text("FLOW")
+                    Text(NSLocalizedString("FLOW", comment: "Flow mode label"))
                         .font(.system(size: 10, weight: .bold))
                     Text(timeString(from: entry.state.flowElapsed))
                         .font(.system(size: 12, weight: .semibold, design: .rounded))

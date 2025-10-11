@@ -4,18 +4,6 @@
     " " : {
       "comment" : "空格字符",
       "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : " "
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : " "
-          }
-        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
@@ -33,40 +21,17 @@
             "state" : "translated",
             "value" : " "
           }
-        }
-      }
-    },
-    "%lld" : {
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "%lld"
-          }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld"
+            "value" : " "
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "%lld"
+            "value" : " "
           }
         }
       }
@@ -108,18 +73,6 @@
     "∞" : {
       "comment" : "无穷符号",
       "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "∞"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "∞"
-          }
-        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
@@ -137,41 +90,17 @@
             "state" : "translated",
             "value" : "∞"
           }
-        }
-      }
-    },
-    "App_Name" : {
-      "comment" : "应用在不同语言环境下显示的名称",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Pomo TAP"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "つまみトマト"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "포모 탭"
-          }
         },
         "zh-Hans" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "捏捏番茄"
+            "value" : "∞"
           }
         },
         "zh-Hant" : {
           "stringUnit" : {
             "state" : "translated",
-            "value" : "捏捏番茄"
+            "value" : "∞"
           }
         }
       }
@@ -316,45 +245,8 @@
         }
       }
     },
-    "Notification_Permission_Description" : {
-      "comment" : "通知权限描述文本",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Please allow notifications to remind you when your Pomodoro is complete."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ポモドーロ完了時に通知するために、通知権限を許可してください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "뽀모도로 완료 시 알림을 받으려면 알림을 허용해 주세요."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "请允许通知权限，以便提醒您番茄钟的完成状态。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "請允許通知權限，以便提醒您番茄鐘的完成狀態。"
-          }
-        }
-      }
-    },
     "NotificationPermissionDescription" : {
       "comment" : "通知权限请求说明",
-      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -423,45 +315,8 @@
         }
       }
     },
-    "Phase_Completed" : {
-      "comment" : "阶段完成对话框标题",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Phase Completed"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "フェーズ完了"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "단계 완료"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "阶段完成"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "階段完成"
-          }
-        }
-      }
-    },
     "Phase_Long_Break" : {
-      "comment" : "长休息阶段",
-      "extractionState" : "stale",
+      "comment" : "阶段类型：长休息",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -496,8 +351,7 @@
       }
     },
     "Phase_Short_Break" : {
-      "comment" : "短休息阶段",
-      "extractionState" : "stale",
+      "comment" : "阶段类型：短休息",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -532,8 +386,7 @@
       }
     },
     "Phase_Work" : {
-      "comment" : "专注工作阶段",
-      "extractionState" : "stale",
+      "comment" : "阶段类型：专注\n阶段类型：专注默认值",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -563,6 +416,76 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "專注"
+          }
+        }
+      }
+    },
+    "Repeat_Notifications" : {
+      "comment" : "重复提醒开关",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Repeat Reminders"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "繰り返し通知"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "반복 알림"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重复提醒"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "重複提醒"
+          }
+        }
+      }
+    },
+    "Repeat_Notifications_Desc" : {
+      "comment" : "重复提醒功能描述",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Repeat notification every 1 minute, 3 times total"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1分毎に通知を繰り返す、合計3回"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1분마다 알림 반복, 총 3회"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每1分钟重复提醒一次，共3次"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每1分鐘重複提醒一次，共3次"
           }
         }
       }
@@ -742,42 +665,6 @@
         }
       }
     },
-    "Skip" : {
-      "comment" : "跳过按钮",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Skip"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "スキップ"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "건너뛰기"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "跳过"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "跳過"
-          }
-        }
-      }
-    },
     "Skip_Current_Phase" : {
       "comment" : "跳过当前阶段选项",
       "localizations" : {
@@ -883,42 +770,6 @@
         }
       }
     },
-    "Start_Later" : {
-      "comment" : "稍后开始下一阶段",
-      "extractionState" : "stale",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Later"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "後で"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "나중에"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "稍后开始"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "稍後開始"
-          }
-        }
-      }
-    },
     "Stop" : {
       "comment" : "停止按钮",
       "localizations" : {
@@ -954,126 +805,9 @@
         }
       }
     },
-    "Repeat_Notifications" : {
-      "comment" : "重复提醒开关",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Repeat Reminders"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "繰り返し通知"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "반복 알림"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重复提醒"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "重複提醒"
-          }
-        }
-      }
-    },
-    "Repeat_Notifications_Desc" : {
-      "comment" : "重复提醒功能描述",
-      "localizations" : {
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Repeat notification every 1 minute, 3 times total"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1分毎に通知を繰り返す、合計3回"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "1분마다 알림 반복, 총 3회"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "每1分钟重复提醒一次，共3次"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "每1分鐘重複提醒一次，共3次"
-          }
-        }
-      }
-    },
-    "为了在番茄钟完成时通知您,我们需要通知权限。请在设置中开启通知。" : {
-      "comment" : "通知权限说明文字",
-      "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "为了在番茄钟完成时通知您，我们需要通知权限。请在设置中开启通知。"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "為了在番茄鐘完成時通知您，我們需要通知權限。請在設定中開啟通知。"
-          }
-        },
-        "en" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "To notify you when the Pomodoro is complete, we need notification permission. Please enable notifications in Settings."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "ポモドーロ完了時に通知するため、通知権限が必要です。設定で通知を有効にしてください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "뽀모도로 완료 시 알림을 위해 알림 권한이 필요합니다. 설정에서 알림을 활성화해 주세요."
-          }
-        }
-      }
-    },
     "去设置" : {
       "comment" : "前往设置按钮",
       "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "去设置"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "前往設定"
-          }
-        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1091,24 +825,24 @@
             "state" : "translated",
             "value" : "설정으로"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "去设置"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "前往設定"
+          }
         }
       }
     },
     "稍后再说" : {
       "comment" : "稍后再说按钮",
       "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "稍后再说"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "稍後再說"
-          }
-        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1126,24 +860,24 @@
             "state" : "translated",
             "value" : "나중에"
           }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "稍后再说"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "稍後再說"
+          }
         }
       }
     },
     "需要通知权限" : {
       "comment" : "需要通知权限标题",
       "localizations" : {
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "需要通知权限"
-          }
-        },
-        "zh-Hant" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "需要通知權限"
-          }
-        },
         "en" : {
           "stringUnit" : {
             "state" : "translated",
@@ -1160,6 +894,18 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "알림 권한 필요"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要通知权限"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "需要通知權限"
           }
         }
       }
