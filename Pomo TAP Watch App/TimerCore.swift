@@ -52,11 +52,21 @@ class TimerCore: NSObject, ObservableObject {
     private var endTime: Date?
     private var pausedRemainingTime: Int?
 
-    // MARK: - Phase Completion Callback
-    var onPhaseCompleted: (() -> Void)?
+    // MARK: - Exposed Timing Metadata
+    var countdownEndDate: Date? {
+        endTime
+    }
+
+    var flowStartDate: Date? {
+        guard isInFlowCountUp else { return nil }
+        return startTime
+    }
+
+    // MARK: - Phase Completion Callback (Async)
+    var onPhaseCompleted: (@MainActor () async -> Void)?
 
     // MARK: - Periodic Update Callback (for Widget sync)
-    var onPeriodicUpdate: (() -> Void)?
+    var onPeriodicUpdate: (@MainActor () async -> Void)?
     private var lastPeriodicUpdateTime: Date?
 
     // MARK: - Initialization
@@ -230,11 +240,17 @@ class TimerCore: NSObject, ObservableObject {
                 let previousTime = self.remainingTime
                 self.remainingTime = newRemainingTime
 
-                // 如果时间到达零，停止计时器并触发回调
+                // 如果时间到达零，停止计时器并触发异步回调
                 if newRemainingTime == 0 {
                     stopTimer()
                     logger.info("计时器自然结束")
-                    onPhaseCompleted?()
+
+                    // 使用 Task 确保异步回调在主线程安全执行
+                    if let onPhaseCompleted = onPhaseCompleted {
+                        Task { @MainActor in
+                            await onPhaseCompleted()
+                        }
+                    }
                     return  // 阶段完成，直接返回
                 } else if abs(previousTime - newRemainingTime) > 1 {
                     // 如果时间跳跃较大，记录日志（可能发生了系统休眠等情况）
@@ -255,7 +271,13 @@ class TimerCore: NSObject, ObservableObject {
         if let lastUpdate = lastPeriodicUpdateTime {
             if now.timeIntervalSince(lastUpdate) >= 60 {
                 lastPeriodicUpdateTime = now
-                onPeriodicUpdate?()
+
+                // 使用 Task 确保异步回调在主线程安全执行
+                if let onPeriodicUpdate = onPeriodicUpdate {
+                    Task { @MainActor in
+                        await onPeriodicUpdate()
+                    }
+                }
             }
         } else {
             lastPeriodicUpdateTime = now

@@ -8,248 +8,150 @@
 import WidgetKit
 import SwiftUI
 import os
-import WatchKit  // Added for WKExtension.shared().applicationState
+import WatchKit
 
-// 添加日志记录器
+// MARK: - 日志
 private let logger = Logger(
     subsystem: "com.songquan.pomoTAP",
     category: "PomoTAPComplication"
 )
 
-// 定义数据模型
+// MARK: - 时间线模型
 struct ComplicationEntry: TimelineEntry {
     let date: Date
-    let phase: String
-    let isRunning: Bool
-    let progress: Double
-    let totalMinutes: Int
-    let remainingTime: Int
+    let state: ComplicationDisplayState
     let relevance: TimelineEntryRelevance?
 }
 
-// 提供数据的 Provider
+// MARK: - Provider
 struct Provider: TimelineProvider {
     func placeholder(in context: Context) -> ComplicationEntry {
-        ComplicationEntry(
-            date: Date(),
-            phase: "work",
-            isRunning: false,
-            progress: 0.0,
-            totalMinutes: 25,
-            remainingTime: 1500,
-            relevance: TimelineEntryRelevance(score: 10)
+        let sampleState = ComplicationDisplayState(
+            displayMode: .countdown,
+            phaseType: .work,
+            isRunning: true,
+            countdownRemaining: 25 * 60,
+            flowElapsed: 0,
+            totalDuration: 25 * 60,
+            progress: 0.25,
+            phaseEndDate: Date().addingTimeInterval(25 * 60),
+            flowStartDate: nil,
+            currentPhaseName: "Work",
+            nextPhaseName: "Short Break",
+            nextPhaseDuration: 5 * 60
         )
+        return ComplicationEntry(date: Date(), state: sampleState, relevance: TimelineEntryRelevance(score: 10))
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (ComplicationEntry) -> ()) {
+    func getSnapshot(in context: Context, completion: @escaping (ComplicationEntry) -> Void) {
         do {
-            let entry = try loadCurrentState()
-            completion(entry)
+            completion(try loadCurrentEntry())
         } catch {
             logger.error("获取快照失败: \(error.localizedDescription)")
-            // 提供默认值作为回退方案
-            completion(ComplicationEntry(
-                date: Date(),
-                phase: "work",
-                isRunning: false,
-                progress: 0.0,
-                totalMinutes: 25,
-                remainingTime: 1500,
-                relevance: TimelineEntryRelevance(score: 10)
-            ))
+            completion(placeholder(in: context))
         }
     }
-    
-    func getTimeline(in context: Context, completion: @escaping (Timeline<ComplicationEntry>) -> ()) {
-        do {
-            let currentEntry = try loadCurrentState()
 
-            // 如果计时器没有运行,只返回当前状态
-            if !currentEntry.isRunning {
-                let timeline = Timeline(entries: [currentEntry], policy: .never)
-                completion(timeline)
+    func getTimeline(in context: Context, completion: @escaping (Timeline<ComplicationEntry>) -> Void) {
+        do {
+            let currentEntry = try loadCurrentEntry()
+
+            guard currentEntry.state.isRunning else {
+                completion(Timeline(entries: [currentEntry], policy: .never))
                 return
             }
 
-            // 检测应用状态，用于自适应时间线策略
-            let appState = WKExtension.shared().applicationState
-            let isActiveOrForeground = (appState == .active || appState == .inactive)
+            let entries = timelineEntries(from: currentEntry)
+            completion(Timeline(entries: entries, policy: .atEnd))
+        } catch {
+            logger.error("生成时间线失败: \(error.localizedDescription)")
+            completion(Timeline(entries: [placeholder(in: context)], policy: .never))
+        }
+    }
 
-            // 计时器运行时的逻辑 - 使用状态感知的稀疏采样策略
-            var entries: [ComplicationEntry] = [currentEntry]
-            let calendar = Calendar.current
-            let now = Date()
-            let remainingSeconds = currentEntry.remainingTime
+    // MARK: - Timeline helpers
+    private func timelineEntries(from entry: ComplicationEntry) -> [ComplicationEntry] {
+        var entries: [ComplicationEntry] = [entry]
+        let calendar = Calendar.current
+        let now = entry.date
+        let state = entry.state
 
-            // 自适应采样策略：
-            // - 活跃状态：使用稀疏采样（前5分钟每分钟、中间每5分钟、最后5分钟每分钟）
-            // - AOD/后台状态：仅每5分钟更新，减少电池消耗
-            let timeIntervals = isActiveOrForeground
+        let appState = WKExtension.shared().applicationState
+        let isActiveOrForeground = (appState == .active || appState == .inactive)
+
+        if state.displayMode == .flow {
+            // 心流模式：每分钟更新，最多 30 分钟
+            let maxMinutes = 30
+            for minute in 1...maxMinutes {
+                guard let futureDate = calendar.date(byAdding: .minute, value: minute, to: now) else { continue }
+                let futureState = state.updatedForFlow(elapsed: state.flowElapsed + minute * 60)
+                let entry = ComplicationEntry(
+                    date: futureDate,
+                    state: futureState,
+                    relevance: calculateRelevance(for: futureState, at: futureDate)
+                )
+                entries.append(entry)
+            }
+        } else {
+            let remainingSeconds = state.countdownRemaining
+            let intervals = isActiveOrForeground
                 ? generateActiveModeIntervals(remainingSeconds: remainingSeconds)
                 : generateAODModeIntervals(remainingSeconds: remainingSeconds)
 
-            for interval in timeIntervals {
-                if let futureDate = calendar.date(byAdding: .second, value: interval, to: now) {
-                    let futureRemainingTime = remainingSeconds - interval
-                    let futureProgress = 1.0 - Double(futureRemainingTime) / Double(currentEntry.totalMinutes * 60)
-
-                    let entry = ComplicationEntry(
-                        date: futureDate,
-                        phase: currentEntry.phase,
-                        isRunning: true,
-                        progress: futureProgress,
-                        totalMinutes: currentEntry.totalMinutes,
-                        remainingTime: futureRemainingTime,
-                        relevance: calculateRelevance(
-                            isRunning: true,
-                            remainingTime: futureRemainingTime,
-                            totalTime: currentEntry.totalMinutes * 60,
-                            date: futureDate
-                        )
-                    )
-                    entries.append(entry)
-                }
+            for seconds in intervals {
+                guard let futureDate = calendar.date(byAdding: .second, value: seconds, to: now) else { continue }
+                let futureRemaining = max(remainingSeconds - seconds, 0)
+                let futureState = state.updatedForCountdown(remaining: futureRemaining)
+                let entry = ComplicationEntry(
+                    date: futureDate,
+                    state: futureState,
+                    relevance: calculateRelevance(for: futureState, at: futureDate)
+                )
+                entries.append(entry)
             }
 
-            // 添加结束时间点
             if let endDate = calendar.date(byAdding: .second, value: remainingSeconds, to: now) {
+                let finalState = state.updatedForCountdown(remaining: 0, isRunning: false, progress: 1.0)
                 let finalEntry = ComplicationEntry(
                     date: endDate,
-                    phase: currentEntry.phase,
-                    isRunning: false,
-                    progress: 1.0,
-                    totalMinutes: currentEntry.totalMinutes,
-                    remainingTime: 0,
-                    relevance: TimelineEntryRelevance(score: 80)  // 阶段完成时高相关性
+                    state: finalState,
+                    relevance: TimelineEntryRelevance(score: 80)
                 )
                 entries.append(finalEntry)
             }
-
-            let timeline = Timeline(entries: entries, policy: .atEnd)
-            logger.debug("生成时间线：\(entries.count)个条目，模式：\(isActiveOrForeground ? "活跃" : "AOD/后台")")
-            completion(timeline)
-
-        } catch {
-            // 发生错误时，返回一个基本的时间线
-            let entry = ComplicationEntry(
-                date: Date(),
-                phase: "work",
-                isRunning: false,
-                progress: 0.0,
-                totalMinutes: 25,
-                remainingTime: 1500,
-                relevance: TimelineEntryRelevance(score: 10)
-            )
-            let timeline = Timeline(entries: [entry], policy: .never)
-            completion(timeline)
         }
+
+        logger.debug("生成时间线：\(entries.count)条，模式：\(state.displayMode.rawValue)")
+        return entries
     }
 
-    // 活跃模式时间间隔生成（原稀疏采样策略）
-    private func generateActiveModeIntervals(remainingSeconds: Int) -> [Int] {
-        return generateTimeIntervals(remainingSeconds: remainingSeconds)
-    }
-
-    // AOD/后台模式时间间隔生成（仅每5分钟更新）
-    private func generateAODModeIntervals(remainingSeconds: Int) -> [Int] {
-        var intervals: [Int] = []
-
-        // 每5分钟更新一次，直到剩余时间结束
-        for second in stride(from: 300, to: remainingSeconds, by: 300) {
-            intervals.append(second)
-        }
-
-        // 如果剩余时间不足5分钟，至少在结束前1分钟更新一次
-        if remainingSeconds > 60 && remainingSeconds < 300 {
-            intervals.append(remainingSeconds - 60)
-        }
-
-        return intervals
-    }
-
-    private func generateTimeIntervals(remainingSeconds: Int) -> [Int] {
-        var intervals: [Int] = []
-
-        let firstPhaseEnd = min(5 * 60, remainingSeconds) // 前5分钟
-        let lastPhaseStart = max(remainingSeconds - 5 * 60, firstPhaseEnd) // 最后5分钟
-
-        // 前5分钟：每分钟
-        for second in stride(from: 60, to: firstPhaseEnd, by: 60) {
-            intervals.append(second)
-        }
-
-        // 中间阶段：每5分钟
-        if lastPhaseStart > firstPhaseEnd {
-            for second in stride(from: firstPhaseEnd + 300, to: lastPhaseStart, by: 300) {
-                intervals.append(second)
-            }
-        }
-
-        // 最后5分钟：每分钟
-        if lastPhaseStart < remainingSeconds {
-            let startMinute = (lastPhaseStart / 60 + 1) * 60 // 向上取整到下一分钟
-            for second in stride(from: startMinute, to: remainingSeconds, by: 60) {
-                intervals.append(second)
-            }
-        }
-
-        return intervals
-    }
-
-    private func calculateRelevance(
-        isRunning: Bool,
-        remainingTime: Int,
-        totalTime: Int,
-        date: Date
-    ) -> TimelineEntryRelevance {
+    private func calculateRelevance(for state: ComplicationDisplayState, at date: Date) -> TimelineEntryRelevance {
         var score: Float = 0
 
-        // 基础分数：计时器运行状态（0-50分）
-        if isRunning {
+        if state.isRunning {
             score += 50
-
-            // 阶段即将结束：最后5分钟提升相关性（+30分）
-            if remainingTime <= 300 {
+            if state.displayMode == .flow || state.countdownRemaining <= 300 {
                 score += 30
             }
         } else {
-            score += 10  // 暂停状态仍有一定相关性
-        }
-
-        // 时间上下文：工作日工作时间段（+5分，降低权重）
-        let calendar = Calendar.current
-        let hour = calendar.component(.hour, from: date)
-        let weekday = calendar.component(.weekday, from: date)
-
-        // weekday: 1=周日, 2=周一, ..., 7=周六
-        // 工作日(周一到周五)且工作时间(9:00-18:00)
-        if (2...6).contains(weekday) && (9...18).contains(hour) {
-            score += 5  // 降低权重，Focus mode 更重要
-        }
-
-        // NEW: 休息即将到来加成（+10分）
-        // 工作阶段最后10分钟，用户希望知道何时休息
-        if isWorkPhaseActive() && remainingTime <= 600 && remainingTime > 300 {
             score += 10
         }
 
-        // 分数范围：0-100
+        let calendar = Calendar.current
+        let hour = calendar.component(.hour, from: date)
+        let weekday = calendar.component(.weekday, from: date)
+        if (2...6).contains(weekday) && (9...18).contains(hour) {
+            score += 5
+        }
+
+        if state.phaseType == .work && state.countdownRemaining <= 600 && state.countdownRemaining > 300 {
+            score += 10
+        }
+
         return TimelineEntryRelevance(score: min(score, 100))
     }
 
-    // Helper: 检测当前是否为工作阶段
-    // watchOS 26: 使用共享状态判断阶段类型
-    private func isWorkPhaseActive() -> Bool {
-        guard let userDefaults = UserDefaults(suiteName: SharedTimerState.suiteName),
-              let data = userDefaults.data(forKey: SharedTimerState.userDefaultsKey),
-              let state = try? JSONDecoder().decode(SharedTimerState.self, from: data) else {
-            return false
-        }
-
-        return state.isCurrentPhaseWorkPhase
-    }
-    
-    private func loadCurrentState() throws -> ComplicationEntry {
+    private func loadCurrentEntry() throws -> ComplicationEntry {
         guard let userDefaults = UserDefaults(suiteName: SharedTimerState.suiteName) else {
             logger.error("无法访问共享 UserDefaults: \(SharedTimerState.suiteName)")
             throw ComplicationError.userDefaultsNotAccessible
@@ -260,104 +162,124 @@ struct Provider: TimelineProvider {
             throw ComplicationError.noDataAvailable
         }
 
-        do {
-            let state = try JSONDecoder().decode(SharedTimerState.self, from: data)
-            logger.info("✅ Widget成功加载状态: phase=\(state.currentPhaseName), running=\(state.timerRunning), remaining=\(state.remainingTime)秒")
+        let state = try JSONDecoder().decode(SharedTimerState.self, from: data)
+        logger.info("✅ Complication加载状态: phase=\(state.currentPhaseName), mode=\(state.displayMode.rawValue)")
 
-            // 计算相关性分数
-            let relevance = calculateRelevance(
-                isRunning: state.timerRunning,
-                remainingTime: state.remainingTime,
-                totalTime: state.totalTime,
-                date: state.lastUpdateTime
-            )
+        let adapter = WidgetStateAdapter(state: state)
+        let displayState = adapter.makeComplicationState()
+        let relevance = calculateRelevance(for: displayState, at: state.lastUpdateTime)
 
-            return ComplicationEntry(
-                date: state.lastUpdateTime,
-                phase: state.standardizedPhaseName,
-                isRunning: state.timerRunning,
-                progress: state.progress,
-                totalMinutes: state.totalTime / 60,
-                remainingTime: state.remainingTime,
-                relevance: relevance
-            )
-        } catch {
-            logger.error("解码状态失败: \(error)")
-            throw ComplicationError.decodingFailed(error)
+        return ComplicationEntry(date: state.lastUpdateTime, state: displayState, relevance: relevance)
+    }
+
+    // MARK: - 时间间隔生成
+    private func generateActiveModeIntervals(remainingSeconds: Int) -> [Int] {
+        generateTimeIntervals(remainingSeconds: remainingSeconds)
+    }
+
+    private func generateAODModeIntervals(remainingSeconds: Int) -> [Int] {
+        var intervals: [Int] = []
+        for second in stride(from: 300, to: remainingSeconds, by: 300) {
+            intervals.append(second)
         }
+        if remainingSeconds > 60 && remainingSeconds < 300 {
+            intervals.append(remainingSeconds - 60)
+        }
+        return intervals
+    }
+
+    private func generateTimeIntervals(remainingSeconds: Int) -> [Int] {
+        var intervals: [Int] = []
+        let firstPhaseEnd = min(5 * 60, remainingSeconds)
+        let lastPhaseStart = max(remainingSeconds - 5 * 60, firstPhaseEnd)
+
+        for second in stride(from: 60, to: firstPhaseEnd, by: 60) {
+            intervals.append(second)
+        }
+        if lastPhaseStart > firstPhaseEnd {
+            for second in stride(from: firstPhaseEnd + 300, to: lastPhaseStart, by: 300) {
+                intervals.append(second)
+            }
+        }
+        if lastPhaseStart < remainingSeconds {
+            let startMinute = (lastPhaseStart / 60 + 1) * 60
+            for second in stride(from: startMinute, to: remainingSeconds, by: 60) {
+                intervals.append(second)
+            }
+        }
+        return intervals
     }
 }
 
-// 添加错误类型
+// MARK: - 错误类型
 enum ComplicationError: Error {
     case userDefaultsNotAccessible
     case noDataAvailable
     case decodingFailed(Error)
-    
-    var localizedDescription: String {
-        switch self {
-        case .userDefaultsNotAccessible:
-            return "无法访问共享 UserDefaults"
-        case .noDataAvailable:
-            return "未找到共享状态数据"
-        case .decodingFailed(let error):
-            return "解码状态失败: \(error.localizedDescription)"
-        }
-    }
 }
 
-// 复杂功能视图 - Circular
-// Uses Closed Gauge style per Apple HIG for watchOS complications
-// Reference: WWDC 2022 "Go further with Complications in WidgetKit"
+// MARK: - 视图
 struct CircularComplicationView: View {
     var entry: ComplicationEntry
 
     var body: some View {
-        // Apple HIG: Use closed gauge for progress-based complications
-        Gauge(value: entry.progress, in: 0...1) {
-            // Empty label - not shown in accessoryCircular
-        } currentValueLabel: {
-            // Center content: Phase icon with improved symbols
-            Image(systemName: phaseSymbol(for: entry))
-                .font(.system(size: 20, weight: .medium))
-                .foregroundStyle(entry.isRunning ? .orange : .white.opacity(0.6))
+        if entry.state.isInFlow {
+            Gauge(value: min(Double(entry.state.flowElapsed) / Double(max(entry.state.totalDuration, 1)), 1.0), in: 0...1) {
+            } currentValueLabel: {
+                VStack(spacing: 2) {
+                    Text("FLOW")
+                        .font(.system(size: 10, weight: .bold))
+                    Text(timeString(from: entry.state.flowElapsed))
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                }
+                .foregroundStyle(.yellow)
                 .widgetAccentable()
+            }
+            .gaugeStyle(.accessoryCircularCapacity)
+            .tint(.yellow)
+            .containerBackground(.clear, for: .widget)
+            .widgetURL(URL(string: "pomoTAP://open")!)
+        } else {
+            Gauge(value: entry.state.progress, in: 0...1) {
+            } currentValueLabel: {
+                VStack(spacing: 2) {
+                    Image(systemName: phaseSymbol(for: entry.state))
+                        .font(.system(size: 18, weight: .medium))
+                    Text(timeString(from: entry.state.countdownRemaining))
+                        .font(.system(size: 12, weight: .semibold, design: .rounded))
+                }
+                .foregroundStyle(entry.state.isRunning ? .orange : .white.opacity(0.6))
+                .widgetAccentable()
+            }
+            .gaugeStyle(.accessoryCircularCapacity)
+            .tint(entry.state.isRunning ? .orange : .white.opacity(0.4))
+            .containerBackground(.clear, for: .widget)
+            .widgetURL(URL(string: "pomoTAP://open")!)
         }
-        .gaugeStyle(.accessoryCircularCapacity)  // Closed gauge style
-        .tint(entry.isRunning ? .orange : .white.opacity(0.4))
-        .containerBackground(.clear, for: .widget)
-        .widgetURL(URL(string: "pomoTAP://open")!)
     }
 }
 
-// Rectangular 视图 - 矩形布局
-// Apple HIG: Clear hierarchy, glanceable information
 struct RectangularComplicationView: View {
     var entry: ComplicationEntry
 
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
-            // 第1行：阶段图标 + 名称 - HIG standard: clear visual hierarchy
             HStack(spacing: 5) {
-                Image(systemName: phaseSymbol(for: entry))
+                Image(systemName: phaseSymbol(for: entry.state))
                     .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(entry.isRunning ? .orange : .white.opacity(0.6))
+                    .foregroundStyle(entry.state.isRunning ? .orange : .white.opacity(0.6))
                     .widgetAccentable()
-                Text(phaseName(for: entry))
+                Text(phaseName(for: entry.state))
                     .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(entry.isRunning ? .primary : .secondary)
+                    .foregroundStyle(entry.state.isRunning ? .primary : .secondary)
                 Spacer()
             }
-
-            // 第2行：剩余时间 - HIG standard: prominent display
-            Text(timeString(from: entry.remainingTime))
+            Text(primaryTimeText(for: entry.state))
                 .font(.system(size: 24, weight: .semibold, design: .rounded))
-                .foregroundStyle(entry.isRunning ? .primary : .secondary)
+                .foregroundStyle(entry.state.isRunning ? .primary : .secondary)
                 .lineLimit(1)
-
-            // 第3行：进度条 - HIG: subtle visual indicator
-            ProgressView(value: entry.progress)
-                .tint(entry.isRunning ? .orange : .white.opacity(0.4))
+            ProgressView(value: entry.state.progressValueForGauge)
+                .tint(entry.state.isRunning ? .orange : .white.opacity(0.4))
                 .frame(height: 4)
         }
         .padding(.vertical, 2)
@@ -365,194 +287,150 @@ struct RectangularComplicationView: View {
     }
 }
 
-// Inline 视图 - 单行文本
-// Apple HIG: Concise, glanceable text above the clock
 struct InlineComplicationView: View {
     var entry: ComplicationEntry
 
     var body: some View {
-        // HIG: Simple, readable format for inline widgets
-        Text("\(phaseEmoji(for: entry)) \(timeString(from: entry.remainingTime))")
+        Text(inlineText(for: entry.state))
             .font(.system(size: 15, weight: .medium, design: .rounded))
             .widgetURL(URL(string: "pomoTAP://open")!)
     }
 }
 
-// Corner 视图 - 角落布局（曲线）
-// Apple HIG: Curved progress arc with center icon and label text
-// Reference: WWDC 2022 "Go further with Complications in WidgetKit"
 struct CornerComplicationView: View {
     var entry: ComplicationEntry
 
     var body: some View {
         ZStack {
-            // Apple HIG: AccessoryWidgetBackground for consistent backdrop
             AccessoryWidgetBackground()
-
-            // Center icon with improved styling
-            Image(systemName: phaseSymbol(for: entry))
+            Image(systemName: phaseSymbol(for: entry.state))
                 .font(.system(size: 24, weight: .medium))
-                .foregroundStyle(entry.isRunning ? .orange : .white.opacity(0.6))
+                .foregroundStyle(entry.state.isRunning ? .orange : .white.opacity(0.6))
                 .widgetAccentable()
         }
         .widgetLabel {
-            // Apple HIG: Curved gauge wraps around corner
-            ProgressView(value: entry.progress) {
-                // Empty label
-            } currentValueLabel: {
-                Text(timeString(from: entry.remainingTime))
-                    .font(.system(size: 14, weight: .semibold, design: .rounded))
-            }
-            .tint(entry.isRunning ? .orange : .white.opacity(0.4))
+            ProgressView(value: entry.state.progressValueForGauge) { }
+                .tint(entry.state.isRunning ? .orange : .white.opacity(0.4))
         }
         .widgetURL(URL(string: "pomoTAP://open")!)
     }
 }
 
-// 辅助函数
-private func phaseSymbol(for entry: ComplicationEntry) -> String {
-    switch entry.phase {
-    case "work":
-        // 使用 wand.and.sparkles 表示专注/工作状态
-        return entry.isRunning ? "wand.and.sparkles" : "wand.and.stars"
-    case "shortBreak":
-        return entry.isRunning ? "cup.and.saucer.fill" : "cup.and.saucer"
-    case "longBreak":
-        return entry.isRunning ? "figure.walk.motion" : "figure.walk"
-    default:
-        return entry.isRunning ? "wand.and.sparkles" : "wand.and.stars"
+// MARK: - 视图辅助
+private func phaseSymbol(for state: ComplicationDisplayState) -> String {
+    switch state.phaseType {
+    case .work:
+        return "brain.head.profile.fill"
+    case .shortBreak:
+        return "cup.and.saucer.fill"
+    case .longBreak:
+        return "bed.double.fill"
+    case .unknown:
+        return "brain.head.profile"
     }
 }
 
-private func phaseEmoji(for entry: ComplicationEntry) -> String {
-    switch entry.phase {
-    case "work": return "🍅"
-    case "shortBreak": return "☕️"
-    case "longBreak": return "🚶"
-    default: return "🍅"
+private func phaseName(for state: ComplicationDisplayState) -> String {
+    switch state.phaseType {
+    case .work:
+        return NSLocalizedString("Work", comment: "")
+    case .shortBreak:
+        return NSLocalizedString("Short_Break", comment: "")
+    case .longBreak:
+        return NSLocalizedString("Long_Break", comment: "")
+    case .unknown:
+        return state.currentPhaseName.capitalized
     }
 }
 
-private func phaseName(for entry: ComplicationEntry) -> String {
-    switch entry.phase {
-    case "work": return NSLocalizedString("Phase_Work", comment: "")
-    case "shortBreak": return NSLocalizedString("Phase_Short_Break", comment: "")
-    case "longBreak": return NSLocalizedString("Phase_Long_Break", comment: "")
-    default: return NSLocalizedString("Phase_Work", comment: "")
+private func inlineText(for state: ComplicationDisplayState) -> String {
+    switch state.displayMode {
+    case .flow:
+        return "☄︎ \(timeString(from: state.flowElapsed))"
+    case .countdown:
+        return "\(phaseEmoji(for: state)) \(timeString(from: state.countdownRemaining))"
+    case .paused:
+        return "⏸ \(phaseName(for: state))"
+    case .idle:
+        return "▶︎ \(phaseName(for: state))"
+    }
+}
+
+private func phaseEmoji(for state: ComplicationDisplayState) -> String {
+    switch state.phaseType {
+    case .work:
+        return "🍅"
+    case .shortBreak:
+        return "☕️"
+    case .longBreak:
+        return "🛌"
+    case .unknown:
+        return "🍅"
+    }
+}
+
+private func primaryTimeText(for state: ComplicationDisplayState) -> String {
+    switch state.displayMode {
+    case .flow:
+        return String(format: NSLocalizedString("Flow_Time_Format", comment: ""), timeString(from: state.flowElapsed))
+    case .countdown:
+        return timeString(from: state.countdownRemaining)
+    case .paused:
+        return NSLocalizedString("Paused", comment: "")
+    case .idle:
+        return NSLocalizedString("Ready", comment: "")
     }
 }
 
 private func timeString(from seconds: Int) -> String {
     let minutes = seconds / 60
-    let secs = seconds % 60
-    if minutes > 0 {
-        return String(format: "%d:%02d", minutes, secs)
-    } else {
-        return String(format: "0:%02d", secs)
+    if minutes >= 60 {
+        let hours = minutes / 60
+        let remaining = minutes % 60
+        return "\(hours)h \(remaining)m"
     }
+    return "\(minutes)m"
 }
 
-// 旧的 ComplicationView（保留向后兼容）
-struct ComplicationView: View {
-    var entry: ComplicationEntry
-
-    var body: some View {
-        CircularComplicationView(entry: entry)
-    }
-}
-
-// Primary Timer Widget (Part of Bundle)
-struct PomoTAPComplication: Widget {
-    private let kind: String = "PomoTAPComplication"
-
-    var body: some WidgetConfiguration {
-        StaticConfiguration(kind: kind, provider: Provider()) { entry in
-            PomoTAPWidgetView(entry: entry)
+private extension ComplicationDisplayState {
+    var progressValueForGauge: Double {
+        if isInFlow {
+            return min(Double(flowElapsed) / Double(max(totalDuration, 1)), 1.0)
         }
-        .configurationDisplayName("Pomo TAP")
-        .description("显示当前番茄钟状态")
-        .supportedFamilies([
-            .accessoryCircular,
-            .accessoryRectangular,
-            .accessoryInline,
-            .accessoryCorner
-        ])
-        .containerBackgroundRemovable(true)
+        return progress
     }
-}
 
-// MARK: - Widget Bundle (All Widgets Entry Point)
-@main
-struct PomoTAPWidgetBundle: WidgetBundle {
-    var body: some Widget {
-        // Primary timer widget
-        PomoTAPComplication()
-        // Quick start widgets
-        QuickStartWorkWidget()
-        QuickStartBreakWidget()
-        // Cycle progress widget
-        CycleProgressWidget()
-        // Stats widget
-        StatsWidget()
-        // Next phase widget
-        NextPhaseWidget()
-        // Smart Stack interactive widget
-        PomoTAPSmartStackWidget()
+    func updatedForCountdown(remaining: Int, isRunning: Bool? = nil, progress: Double? = nil) -> ComplicationDisplayState {
+        ComplicationDisplayState(
+            displayMode: remaining > 0 ? .countdown : .idle,
+            phaseType: phaseType,
+            isRunning: isRunning ?? (remaining > 0),
+            countdownRemaining: remaining,
+            flowElapsed: 0,
+            totalDuration: totalDuration,
+            progress: progress ?? (totalDuration > 0 ? 1.0 - Double(remaining) / Double(totalDuration) : self.progress),
+            phaseEndDate: phaseEndDate,
+            flowStartDate: flowStartDate,
+            currentPhaseName: currentPhaseName,
+            nextPhaseName: nextPhaseName,
+            nextPhaseDuration: nextPhaseDuration
+        )
     }
-}
 
-// 主 Widget 视图，根据 family 自动选择
-struct PomoTAPWidgetView: View {
-    var entry: ComplicationEntry
-    @Environment(\.widgetFamily) var family
-
-    var body: some View {
-        switch family {
-        case .accessoryCircular:
-            CircularComplicationView(entry: entry)
-        case .accessoryRectangular:
-            RectangularComplicationView(entry: entry)
-        case .accessoryInline:
-            InlineComplicationView(entry: entry)
-        case .accessoryCorner:
-            CornerComplicationView(entry: entry)
-        default:
-            CircularComplicationView(entry: entry)
-        }
+    func updatedForFlow(elapsed: Int) -> ComplicationDisplayState {
+        ComplicationDisplayState(
+            displayMode: .flow,
+            phaseType: phaseType,
+            isRunning: true,
+            countdownRemaining: 0,
+            flowElapsed: elapsed,
+            totalDuration: totalDuration,
+            progress: progress,
+            phaseEndDate: phaseEndDate,
+            flowStartDate: flowStartDate,
+            currentPhaseName: currentPhaseName,
+            nextPhaseName: nextPhaseName,
+            nextPhaseDuration: nextPhaseDuration
+        )
     }
-}
-
-#Preview(as: .accessoryCircular) {
-    PomoTAPComplication()
-} timeline: {
-    // 工作阶段 - 30% 进度
-    ComplicationEntry(
-        date: .now,
-        phase: "work",
-        isRunning: true,
-        progress: 0.3,
-        totalMinutes: 25,
-        remainingTime: 1050,
-        relevance: TimelineEntryRelevance(score: 50)
-    )
-    // 工作阶段 - 70% 进度
-    ComplicationEntry(
-        date: .now,
-        phase: "work",
-        isRunning: true,
-        progress: 0.7,
-        totalMinutes: 25,
-        remainingTime: 450,
-        relevance: TimelineEntryRelevance(score: 80)
-    )
-    // 短休息阶段 - 暂停状态
-    ComplicationEntry(
-        date: .now,
-        phase: "shortBreak",
-        isRunning: false,
-        progress: 0.0,
-        totalMinutes: 5,
-        remainingTime: 300,
-        relevance: TimelineEntryRelevance(score: 10)
-    )
 }

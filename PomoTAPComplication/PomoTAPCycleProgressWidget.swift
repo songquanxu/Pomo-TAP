@@ -16,13 +16,15 @@ struct CycleProgressEntry: TimelineEntry {
     let date: Date
     let phaseStatuses: [PhaseCompletionStatus]
     let currentPhaseIndex: Int
+    let displayMode: PhaseDisplayMode
 
     // Fallback for when no data available
     static var placeholder: CycleProgressEntry {
         CycleProgressEntry(
             date: Date(),
             phaseStatuses: [.current, .notStarted, .notStarted, .notStarted],
-            currentPhaseIndex: 0
+            currentPhaseIndex: 0,
+            displayMode: .countdown
         )
     }
 }
@@ -72,7 +74,8 @@ struct CycleProgressProvider: TimelineProvider {
         return CycleProgressEntry(
             date: state.lastUpdateTime,
             phaseStatuses: state.phaseCompletionStatus,
-            currentPhaseIndex: state.currentPhaseIndex
+            currentPhaseIndex: state.currentPhaseIndex,
+            displayMode: state.displayMode
         )
     }
 }
@@ -101,7 +104,8 @@ struct CycleProgressRectangularView: View {
                 ForEach(0..<min(4, entry.phaseStatuses.count), id: \.self) { index in
                     PhaseProgressIndicator(
                         status: entry.phaseStatuses[index],
-                        isCurrent: index == entry.currentPhaseIndex
+                        isCurrent: index == entry.currentPhaseIndex,
+                        isFlowMode: entry.displayMode == .flow
                     )
                 }
             }
@@ -115,6 +119,7 @@ struct CycleProgressRectangularView: View {
 struct PhaseProgressIndicator: View {
     let status: PhaseCompletionStatus
     let isCurrent: Bool
+    let isFlowMode: Bool
 
     var body: some View {
         Circle()
@@ -122,11 +127,15 @@ struct PhaseProgressIndicator: View {
             .frame(width: 12, height: 12)
             .overlay(
                 Circle()
-                    .strokeBorder(isCurrent ? .white : .clear, lineWidth: 2)
+                    .strokeBorder(isCurrent ? strokeColor : .clear, lineWidth: 2)
             )
     }
 
     private var statusColor: Color {
+        if isCurrent && isFlowMode {
+            return .yellow
+        }
+
         switch status {
         case .normalCompleted:
             return .orange
@@ -137,6 +146,10 @@ struct PhaseProgressIndicator: View {
         case .notStarted:
             return .gray.opacity(0.3)
         }
+    }
+
+    private var strokeColor: Color {
+        isFlowMode ? .yellow.opacity(0.6) : .white
     }
 }
 

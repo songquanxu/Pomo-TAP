@@ -14,7 +14,7 @@ class NotificationRepeatManager: ObservableObject {
 
     // MARK: - Public Methods
 
-    /// 调度重复通知
+    /// 调度重复通知 - 智能重复提醒机制
     /// - Parameters:
     ///   - initialDelay: 第一次通知的延迟时间（秒）
     ///   - title: 通知标题
@@ -32,70 +32,111 @@ class NotificationRepeatManager: ObservableObject {
                 return
             }
 
-            // 先取消所有待发送的重复通知
+            // 智能清理：只取消重复通知，保留主通知
             await cancelAllRepeatNotifications()
 
-            // 调度 3 次重复通知（在主通知之后）
+            // 调度重复通知序列（渐进式提醒策略）
             for index in 0..<repeatCount {
-                // 计算每次通知的延迟时间
-                // 主通知在 initialDelay 时触发
-                // 第 0 次重复：initialDelay + 60 秒（主通知后 1 分钟）
-                // 第 1 次重复：initialDelay + 120 秒（主通知后 2 分钟）
-                // 第 2 次重复：initialDelay + 180 秒（主通知后 3 分钟）
-                let delay = initialDelay + (TimeInterval(index + 1) * repeatInterval)
+                // 智能延迟策略：
+                // 重复 1: 主通知后 1 分钟 (用户可能未注意到)
+                // 重复 2: 主通知后 3 分钟 (适度提醒)
+                // 重复 3: 主通知后 6 分钟 (最后提醒)
+                let delayMultipliers: [TimeInterval] = [1, 3, 6]
+                let delay = initialDelay + (delayMultipliers[index] * 60)
 
-                // 创建通知内容
-                let content = UNMutableNotificationContent()
-                content.title = title
-                content.body = body
-                content.sound = .default
-                content.interruptionLevel = .timeSensitive
-                content.threadIdentifier = "PomoTAP_Notifications"
-                content.categoryIdentifier = "PHASE_COMPLETED"
+                // 创建高优先级通知内容
+                let content = createRepeatNotificationContent(
+                    title: title,
+                    body: body,
+                    repeatIndex: index
+                )
 
-                // 创建触发器
+                // 创建精确触发器
                 let trigger = UNTimeIntervalNotificationTrigger(
                     timeInterval: delay,
                     repeats: false
                 )
 
-                // 创建通知请求（使用固定 identifier 以便取消）
-                let identifier = "PomoTAP_Repeat_\(index)"
+                // 创建唯一标识符（防止与主通知冲突）
+                let identifier = "PomoTAP_Repeat_\(Date().timeIntervalSince1970)_\(index)"
                 let request = UNNotificationRequest(
                     identifier: identifier,
                     content: content,
                     trigger: trigger
                 )
 
-                // 添加通知到系统
+                // 异步添加通知（提高性能）
                 try await UNUserNotificationCenter.current().add(request)
-                logger.info("已调度重复通知 #\(index + 1): \(delay)秒后触发")
+                logger.info("✅ 智能重复通知 #\(index + 1): \(Int(delay))秒后触发（延迟\(Int(delayMultipliers[index]))分钟）")
             }
 
-            logger.info("✅ 成功调度 \(self.repeatCount) 次重复通知")
+            logger.info("✅ 成功调度 \(self.repeatCount) 次智能重复通知（渐进式提醒）")
 
         } catch {
             logger.error("调度重复通知失败: \(error.localizedDescription)")
         }
     }
 
-    /// 取消所有待发送的重复通知
+    /// 创建重复通知内容 - 优化用户体验
+    private func createRepeatNotificationContent(
+        title: String,
+        body: String,
+        repeatIndex: Int
+    ) -> UNMutableNotificationContent {
+        let content = UNMutableNotificationContent()
+
+        // 渐进式标题策略
+        switch repeatIndex {
+        case 0:
+            content.title = "⏰ " + title  // 第一次重复：时钟提醒
+        case 1:
+            content.title = "🔔 " + title  // 第二次重复：铃铛提醒
+        case 2:
+            content.title = "⚠️ " + title  // 第三次重复：警告提醒
+        default:
+            content.title = title
+        }
+
+        content.body = body
+        content.sound = .default
+        content.interruptionLevel = .timeSensitive  // 高优先级
+        content.relevanceScore = 0.9  // 高相关性（比主通知更高）
+        content.threadIdentifier = "PomoTAP_Notifications"
+        content.categoryIdentifier = "PHASE_COMPLETED"
+
+        return content
+    }
+
+    /// 取消所有待发送的重复通知 - 智能标识符管理
     func cancelAllRepeatNotifications() async {
         // 获取所有待发送的通知
         let pendingRequests = await UNUserNotificationCenter.current().pendingNotificationRequests()
 
-        // 筛选出重复通知的 identifier
+        // 智能筛选：只取消重复通知，保留主通知
         let repeatIdentifiers = pendingRequests
             .filter { $0.identifier.hasPrefix("PomoTAP_Repeat_") }
             .map { $0.identifier }
 
-        // 取消重复通知
+        // 批量取消重复通知（高效操作）
         if !repeatIdentifiers.isEmpty {
             UNUserNotificationCenter.current().removePendingNotificationRequests(
                 withIdentifiers: repeatIdentifiers
             )
-            logger.info("已取消 \(repeatIdentifiers.count) 个待发送的重复通知")
+            logger.info("🗑️ 智能清理：已取消 \(repeatIdentifiers.count) 个重复通知（保留主通知）")
+        } else {
+            logger.debug("无重复通知需要取消")
         }
+    }
+
+    /// 获取重复通知状态 - 调试和监控
+    func getRepeatNotificationStatus() async -> (pending: Int, identifiers: [String]) {
+        let pendingRequests = await UNUserNotificationCenter.current().pendingNotificationRequests()
+        let repeatRequests = pendingRequests.filter { $0.identifier.hasPrefix("PomoTAP_Repeat_") }
+
+        let identifiers = repeatRequests.map { $0.identifier }
+        logger.debug("📊 重复通知状态：\(repeatRequests.count) 个待发送")
+
+        return (pending: repeatRequests.count, identifiers: identifiers)
     }
 
     /// 取消所有通知（包括普通通知和重复通知）

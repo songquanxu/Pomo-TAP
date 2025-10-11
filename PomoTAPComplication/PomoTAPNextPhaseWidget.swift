@@ -2,8 +2,6 @@
 //  PomoTAPNextPhaseWidget.swift
 //  PomoTAPComplication
 //
-//  Created for Pomo TAP watchOS app
-//
 
 import WidgetKit
 import SwiftUI
@@ -11,114 +9,122 @@ import os
 
 private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "NextPhaseWidget")
 
-// MARK: - Next Phase Entry
 struct NextPhaseEntry: TimelineEntry {
     let date: Date
-    let nextPhaseName: String
-    let remainingTime: Int
-    let isRunning: Bool
+    let state: SmartStackDisplayState
 
     static var placeholder: NextPhaseEntry {
-        NextPhaseEntry(
-            date: Date(),
+        let sampleState = SmartStackDisplayState(
+            displayMode: .countdown,
+            phaseType: .work,
+            phaseName: "Work",
+            isRunning: true,
+            countdownRemaining: 25 * 60,
+            flowElapsed: 0,
+            totalDuration: 25 * 60,
+            completedCycles: 2,
+            hasSkippedInCurrentCycle: false,
+            phaseStatuses: [.current, .notStarted, .notStarted, .notStarted],
             nextPhaseName: "Short Break",
-            remainingTime: 900,
-            isRunning: true
+            nextPhaseDuration: 5 * 60
         )
+        return NextPhaseEntry(date: Date(), state: sampleState)
     }
 }
 
-// MARK: - Next Phase Provider
 struct NextPhaseProvider: TimelineProvider {
     func placeholder(in context: Context) -> NextPhaseEntry {
-        .placeholder
+        NextPhaseEntry.placeholder
     }
 
-    func getSnapshot(in context: Context, completion: @escaping (NextPhaseEntry) -> ()) {
+    func getSnapshot(in context: Context, completion: @escaping (NextPhaseEntry) -> Void) {
         do {
-            let entry = try loadNextPhaseState()
-            completion(entry)
+            completion(try loadEntry())
         } catch {
             logger.error("获取NextPhase快照失败: \(error.localizedDescription)")
-            completion(.placeholder)
+            completion(NextPhaseEntry.placeholder)
         }
     }
 
-    func getTimeline(in context: Context, completion: @escaping (Timeline<NextPhaseEntry>) -> ()) {
+    func getTimeline(in context: Context, completion: @escaping (Timeline<NextPhaseEntry>) -> Void) {
         do {
-            let currentEntry = try loadNextPhaseState()
-
-            // Dynamic timeline - updates as timer progresses
-            if currentEntry.isRunning {
-                var entries: [NextPhaseEntry] = [currentEntry]
-                let calendar = Calendar.current
-
-                // Update every 5 minutes
-                for minutesAhead in stride(from: 5, to: min(60, currentEntry.remainingTime / 60), by: 5) {
-                    if let futureDate = calendar.date(byAdding: .minute, value: minutesAhead, to: Date()) {
-                        let futureEntry = NextPhaseEntry(
-                            date: futureDate,
-                            nextPhaseName: currentEntry.nextPhaseName,
-                            remainingTime: currentEntry.remainingTime - (minutesAhead * 60),
-                            isRunning: true
-                        )
-                        entries.append(futureEntry)
-                    }
-                }
-
-                let timeline = Timeline(entries: entries, policy: .atEnd)
-                completion(timeline)
-            } else {
-                let timeline = Timeline(entries: [currentEntry], policy: .never)
-                completion(timeline)
+            let entry = try loadEntry()
+            guard entry.state.isRunning else {
+                completion(Timeline(entries: [entry], policy: .never))
+                return
             }
+
+            let timelineEntries = timeline(from: entry)
+            completion(Timeline(entries: timelineEntries, policy: .atEnd))
         } catch {
             logger.error("获取NextPhase时间线失败: \(error.localizedDescription)")
-            let timeline = Timeline(entries: [NextPhaseEntry.placeholder], policy: .never)
-            completion(timeline)
+            completion(Timeline(entries: [NextPhaseEntry.placeholder], policy: .never))
         }
     }
 
-    private func loadNextPhaseState() throws -> NextPhaseEntry {
+    private func loadEntry() throws -> NextPhaseEntry {
         guard let userDefaults = UserDefaults(suiteName: SharedTimerState.suiteName) else {
             throw ComplicationError.userDefaultsNotAccessible
         }
-
         guard let data = userDefaults.data(forKey: SharedTimerState.userDefaultsKey) else {
             throw ComplicationError.noDataAvailable
         }
 
         let state = try JSONDecoder().decode(SharedTimerState.self, from: data)
+        let adapter = WidgetStateAdapter(state: state)
+        let displayState = adapter.makeSmartStackState()
 
-        // Calculate next phase
-        let nextPhaseIndex = (state.currentPhaseIndex + 1) % state.phases.count
-        let nextPhase = state.phases[nextPhaseIndex]
+        logger.info("✅ NextPhase加载: next=\(displayState.nextPhaseName ?? "nil"), mode=\(displayState.displayMode.rawValue)")
 
-        logger.info("✅ NextPhase Widget成功加载状态: next=\(nextPhase.name), remaining=\(state.remainingTime)秒")
+        return NextPhaseEntry(date: state.lastUpdateTime, state: displayState)
+    }
 
-        return NextPhaseEntry(
-            date: state.lastUpdateTime,
-            nextPhaseName: nextPhase.name,
-            remainingTime: state.remainingTime,
-            isRunning: state.timerRunning
-        )
+    private func timeline(from entry: NextPhaseEntry) -> [NextPhaseEntry] {
+        var entries: [NextPhaseEntry] = [entry]
+        let calendar = Calendar.current
+        let now = entry.date
+        let state = entry.state
+
+        if state.displayMode == .flow {
+            for minute in 1...30 {
+                guard let futureDate = calendar.date(byAdding: .minute, value: minute, to: now) else { continue }
+                let newState = state.updatedForFlow(elapsed: state.flowElapsed + minute * 60)
+                entries.append(NextPhaseEntry(date: futureDate, state: newState))
+            }
+        } else {
+            let remainingMinutes = max(state.countdownRemaining / 60, 1)
+            for minute in stride(from: 5, through: min(60, remainingMinutes), by: 5) {
+                guard let futureDate = calendar.date(byAdding: .minute, value: minute, to: now) else { continue }
+                let futureRemaining = max(state.countdownRemaining - minute * 60, 0)
+                let newState = state.updatedForCountdown(remaining: futureRemaining)
+                entries.append(NextPhaseEntry(date: futureDate, state: newState))
+            }
+        }
+
+        return entries
     }
 }
 
-// MARK: - Next Phase Views
-
-// Inline View
-struct NextPhaseInlineView: View {
+struct NextPhaseWidgetView: View {
     var entry: NextPhaseEntry
 
     var body: some View {
-        // HIG standard: 15pt regular rounded
-        if entry.isRunning {
-            Text("\(NSLocalizedString("Next", comment: "")): \(entry.nextPhaseName) · \(timeString(from: entry.remainingTime))")
-                .font(WidgetTypography.Inline.text)
-        } else {
-            Text("\(NSLocalizedString("Next", comment: "")): \(entry.nextPhaseName)")
-                .font(WidgetTypography.Inline.text)
+        Text(displayText(for: entry.state))
+            .font(WidgetTypography.Inline.text)
+            .widgetURL(URL(string: "pomoTAP://open")!)
+    }
+
+    private func displayText(for state: SmartStackDisplayState) -> String {
+        let nextName = state.nextPhaseName ?? NSLocalizedString("Unknown", comment: "")
+        switch state.displayMode {
+        case .flow:
+            return String(format: NSLocalizedString("Inline_Next_After_Flow", comment: ""), nextName, timeString(from: state.flowElapsed))
+        case .countdown:
+            return String(format: NSLocalizedString("Inline_Next_Countdown", comment: ""), nextName, timeString(from: state.countdownRemaining))
+        case .paused:
+            return String(format: NSLocalizedString("Inline_Next_Paused", comment: ""), nextName)
+        case .idle:
+            return String(format: NSLocalizedString("Inline_Next_Ready", comment: ""), nextName)
         }
     }
 
@@ -128,19 +134,8 @@ struct NextPhaseInlineView: View {
     }
 }
 
-// MARK: - Widget Main View
-struct NextPhaseWidgetView: View {
-    var entry: NextPhaseEntry
-
-    var body: some View {
-        NextPhaseInlineView(entry: entry)
-            .widgetURL(URL(string: "pomoTAP://open")!)
-    }
-}
-
-// MARK: - Widget Definition
 struct NextPhaseWidget: Widget {
-    private let kind: String = "NextPhaseWidget"
+    private let kind = "NextPhaseWidget"
 
     var body: some WidgetConfiguration {
         StaticConfiguration(kind: kind, provider: NextPhaseProvider()) { entry in

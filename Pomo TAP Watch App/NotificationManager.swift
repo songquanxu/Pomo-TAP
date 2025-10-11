@@ -66,6 +66,7 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
                 let content = UNMutableNotificationContent()
                 content.sound = .default
                 content.interruptionLevel = .timeSensitive
+                content.relevanceScore = 0.8  // 高相关性评分，提升 Smart Stack 和通知优先级
                 content.threadIdentifier = "PomoTAP_Notifications"
                 content.categoryIdentifier = "PHASE_COMPLETED"
 
@@ -151,9 +152,12 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        // 无论前台还是后台，都显示系统通知（横幅 + 声音）
-        // 这确保用户在任何状态下都能收到阶段完成提醒
-        completionHandler([.banner, .sound])
+        // watchOS 26 通知展示：使用 list/banner + sound，避免使用已废弃的 .alert
+        if #available(watchOS 10.0, *) {
+            completionHandler([.list, .sound])
+        } else {
+            completionHandler([.banner, .sound])
+        }
     }
 
     // MARK: - Private Methods
