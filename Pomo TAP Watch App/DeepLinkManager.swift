@@ -157,44 +157,37 @@ class DeepLinkManager: ObservableObject {
 
         logger.info("🔗 执行深度链接操作: \(action.description)")
 
-        do {
-            switch action {
-            case .open:
-                // 打开应用 - 无需具体操作
-                executionStats.recordSuccess()
-                return .success(message: "应用已打开")
+        switch action {
+        case .open:
+            // 打开应用 - 无需具体操作
+            executionStats.recordSuccess()
+            return .success(message: "应用已打开")
 
-            case .startWork:
-                timerModel.startWorkPhaseDirectly()
-                executionStats.recordSuccess()
-                return .success(message: "工作阶段已开始")
+        case .startWork:
+            timerModel.startWorkPhaseDirectly()
+            executionStats.recordSuccess()
+            return .success(message: "工作阶段已开始")
 
-            case .startBreak:
-                timerModel.startBreakPhaseDirectly()
-                executionStats.recordSuccess()
-                return .success(message: "短休息已开始")
+        case .startBreak:
+            timerModel.startBreakPhaseDirectly()
+            executionStats.recordSuccess()
+            return .success(message: "短休息已开始")
 
-            case .startLongBreak:
-                timerModel.startLongBreakPhaseDirectly()
-                executionStats.recordSuccess()
-                return .success(message: "长休息已开始")
+        case .startLongBreak:
+            timerModel.startLongBreakPhaseDirectly()
+            executionStats.recordSuccess()
+            return .success(message: "长休息已开始")
 
-            case .toggle:
-                await timerModel.toggleTimer()
-                let message = timerModel.timerRunning ? "计时器已启动" : "计时器已暂停"
-                executionStats.recordSuccess()
-                return .success(message: message)
+        case .toggle:
+            await timerModel.toggleTimer()
+            let message = timerModel.timerRunning ? "计时器已启动" : "计时器已暂停"
+            executionStats.recordSuccess()
+            return .success(message: message)
 
-            case .skipPhase:
-                await timerModel.skipCurrentPhase()
-                executionStats.recordSuccess()
-                return .success(message: "已跳过当前阶段")
-            }
-        } catch {
-            let errorMessage = "执行 \(action.description) 失败: \(error.localizedDescription)"
-            logger.error("\(errorMessage)")
-            executionStats.recordFailure()
-            return .failed(error: errorMessage)
+        case .skipPhase:
+            await timerModel.skipCurrentPhase()
+            executionStats.recordSuccess()
+            return .success(message: "已跳过当前阶段")
         }
     }
 
