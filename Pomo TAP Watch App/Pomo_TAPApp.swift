@@ -47,13 +47,13 @@ struct Pomo_TAPApp: App {
                         await handleDeepLinkResult(result)
                     }
                 }
-                .alert("需要通知权限", isPresented: $showNotificationPermissionAlert) {
-                    Button("去设置", role: .none) {
+                .alert(NSLocalizedString("需要通知权限", comment: ""), isPresented: $showNotificationPermissionAlert) {
+                    Button(NSLocalizedString("去设置", comment: ""), role: .none) {
                         openSettings()
                     }
-                    Button("稍后再说", role: .cancel) { }
+                    Button(NSLocalizedString("稍后再说", comment: ""), role: .cancel) { }
                 } message: {
-                    Text("为了在番茄钟完成时通知您,我们需要通知权限。请在设置中开启通知。")
+                    Text(NSLocalizedString("NotificationPermissionDescription", comment: ""))
                 }
                 .task {
                     // 在视图加载后检查权限

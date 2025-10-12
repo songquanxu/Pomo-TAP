@@ -77,10 +77,7 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
                     // 获取下一个阶段的名称
                     let nextPhaseIndex = ((timerModel?.currentPhaseIndex ?? 0) + 1) % (timerModel?.phases.count ?? 4)
                     let nextPhaseName = timerModel?.phases[nextPhaseIndex].name ?? "Work"
-                    let nextPhaseType = NSLocalizedString(
-                        getPhaseLocalizationKey(for: nextPhaseName),
-                        comment: "阶段类型：专注/短休息/长休息"
-                    )
+                    let nextPhaseType = localizedPhaseDisplayName(for: nextPhaseName)
 
                     content.body = String(
                         format: NSLocalizedString("Notification_Body", comment: "通知内容：%d = 持续时间（分钟），%@ = 阶段类型"),
@@ -161,16 +158,16 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
     }
 
     // MARK: - Private Methods
-    private func getPhaseLocalizationKey(for phaseName: String) -> String {
+    private func localizedPhaseDisplayName(for phaseName: String) -> String {
         switch phaseName.lowercased() {
         case "work", "专注":
-            return "Phase_Work"
+            return NSLocalizedString("Phase_Work", comment: "阶段类型：专注")
         case "short break", "短休息":
-            return "Phase_Short_Break"
+            return NSLocalizedString("Phase_Short_Break", comment: "阶段类型：短休息")
         case "long break", "长休息":
-            return "Phase_Long_Break"
+            return NSLocalizedString("Phase_Long_Break", comment: "阶段类型：长休息")
         default:
-            return "Phase_Work"
+            return NSLocalizedString("Phase_Work", comment: "阶段类型：专注默认值")
         }
     }
 

@@ -178,7 +178,7 @@ struct SmartStackWidgetView: View {
                 .foregroundStyle(.primary)
             Spacer()
             if entry.state.displayMode == .flow {
-                Text("FLOW")
+                Text(NSLocalizedString("FLOW", comment: "Flow mode badge"))
                     .font(.system(size: 11, weight: .bold, design: .rounded))
                     .foregroundStyle(.yellow)
                     .padding(.horizontal, 6)
