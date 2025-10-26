@@ -228,32 +228,26 @@ struct CircularComplicationView: View {
 
     var body: some View {
         if entry.state.isInFlow {
-            Gauge(value: min(Double(entry.state.flowElapsed) / Double(max(entry.state.totalDuration, 1)), 1.0), in: 0...1) {
+            // Flow mode: show infinity icon with full ring
+            Gauge(value: 1.0, in: 0...1) {
             } currentValueLabel: {
-                VStack(spacing: 2) {
-                    Text(NSLocalizedString("FLOW", comment: "Flow mode label"))
-                        .font(.system(size: 10, weight: .bold))
-                    Text(timeString(from: entry.state.flowElapsed))
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                }
-                .foregroundStyle(.yellow)
-                .widgetAccentable()
+                Image(systemName: "infinity")
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(.yellow)
+                    .widgetAccentable()
             }
             .gaugeStyle(.accessoryCircularCapacity)
             .tint(.yellow)
             .containerBackground(.clear, for: .widget)
             .widgetURL(URL(string: "pomoTAP://open")!)
         } else {
+            // Normal countdown mode: show phase icon with progress ring
             Gauge(value: entry.state.progress, in: 0...1) {
             } currentValueLabel: {
-                VStack(spacing: 2) {
-                    Image(systemName: phaseSymbol(for: entry.state))
-                        .font(.system(size: 18, weight: .medium))
-                    Text(timeString(from: entry.state.countdownRemaining))
-                        .font(.system(size: 12, weight: .semibold, design: .rounded))
-                }
-                .foregroundStyle(entry.state.isRunning ? .orange : .white.opacity(0.6))
-                .widgetAccentable()
+                Image(systemName: phaseSymbol(for: entry.state))
+                    .font(.system(size: 20, weight: .medium))
+                    .foregroundStyle(entry.state.isRunning ? .orange : .white.opacity(0.6))
+                    .widgetAccentable()
             }
             .gaugeStyle(.accessoryCircularCapacity)
             .tint(entry.state.isRunning ? .orange : .white.opacity(0.4))
@@ -322,15 +316,21 @@ struct CornerComplicationView: View {
 
 // MARK: - 视图辅助
 private func phaseSymbol(for state: ComplicationDisplayState) -> String {
+    // Flow mode: show infinity symbol
+    if state.isInFlow {
+        return "infinity"
+    }
+
+    // Normal/paused mode: state-aware icons
     switch state.phaseType {
     case .work:
-        return "brain.head.profile.fill"
-    case .shortBreak:
-        return "cup.and.saucer.fill"
-    case .longBreak:
-        return "bed.double.fill"
+        // Work phase: wand with sparkles (running) or stars (paused)
+        return state.isRunning ? "wand.and.sparkles" : "wand.and.stars"
+    case .shortBreak, .longBreak:
+        // Break phases: cup with heat waves
+        return "cup.and.heat.waves"
     case .unknown:
-        return "brain.head.profile"
+        return "wand.and.sparkles"
     }
 }
 

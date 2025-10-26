@@ -256,7 +256,7 @@
       }
     },
     "FLOW" : {
-
+      "comment" : "Flow mode badge"
     },
     "Flow_Info_Format" : {
       "comment" : "心流模式信息格式",

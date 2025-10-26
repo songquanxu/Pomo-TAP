@@ -6,19 +6,33 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Project Overview
-## Session Insights & Design Decisions (2025-10-06 ~ 2025-10-07)
+## Session Insights & Design Decisions (2025-10-06 ~ 2025-10-26)
+
+### watchOS 26 Migration & Widget Standards (2025-10-26)
+- **ClockKit Deprecation**: watchOS 26 fully deprecates ClockKit complications. All complications MUST use WidgetKit exclusively.
+- **Push Notification Support**: New in watchOS 26 - widgets can receive push updates via APNs on all platforms supporting WidgetKit.
+- **RelevanceKit Framework**: New contextual-awareness system for Smart Stack suggestions based on:
+  - Date/time intervals, sleep schedules, fitness data
+  - Location and point-of-interest categories
+  - Custom configuration intents
+- **Relevant Widgets**: Specialized widget configuration displaying multiple suggested views simultaneously (addresses timeline single-entry limitation).
+- **Migration Priority**: ClockKit → WidgetKit conversion is CRITICAL given push notification support and framework deprecation.
 
 ### Complications/Widget Design (watchOS 26+)
-- **Circular complication**: Use `.gaugeStyle(.accessoryCircularCapacity)` (closed gauge) for progress. Center icon for work phase is `wand.and.sparkles` (running) and `wand.and.stars` (paused). Use system accent color for running state, semi-transparent white for paused.
+- **Circular complication**: Use `.gaugeStyle(.accessoryCircularCapacity)` (closed gauge) for progress. Center icon uses state-aware SF Symbols:
+  - **Work phase**: `wand.and.sparkles` (running) and `wand.and.stars` (paused)
+  - **Break phases**: `cup.and.heat.waves` (all break types)
+  - **Flow mode (heart flow)**: `infinity` symbol with full closed ring (100% capacity)
+  - Use system accent color for running state (orange), semi-transparent white for paused (opacity 0.6 for icons, 0.4 for gauge tint)
+  - **Icon font size**: 20pt medium (per Apple HIG)
+  - **Progress direction**: Ring shows **elapsed time** (fills from 0% → 100%), not remaining time
 - **Rectangular complication**: Hierarchy: top row icon+phase name (13pt semibold), large time (24pt semibold rounded), system `ProgressView` for progress bar. Padding and spacing per Apple HIG. Use system rounded fonts for clarity.
 - **Corner complication**: Use `AccessoryWidgetBackground` and `ProgressView` (NOT Gauge) in `.widgetLabel` for curved progress arc. Center icon 24pt medium, label text 14pt semibold rounded. Colors match circular style.
 - **Inline complication**: Only show emoji + time (15pt regular rounded), no phase name, for glanceability.
-- **All icons**: Use SF Symbols. Work: `wand.and.sparkles`/`wand.and.stars`, Short Break: `cup.and.saucer.fill`/`cup.and.saucer`, Long Break: `figure.walk.motion`/`figure.walk`.
-- **Accentable**: Always use `.widgetAccentable()` for icons/images in widgets.
+- **All icons**: Use SF Symbols exclusively. Always use `.widgetAccentable()` for icons/images in widgets to enable watch face accent color tinting.
 - **Background**: Use `.containerBackground(.clear, for: .widget)` for all widget backgrounds.
 - **Gauge/Progress**: Never manually draw progress rings; always use system controls. Use `Gauge` for Circular complications, `ProgressView` for Corner and Rectangular.
 - **Font sizes**: Circular icon 20pt medium, Rectangular title 13pt semibold, time 24pt semibold rounded, Corner icon 24pt medium, label 14pt semibold rounded, Inline text 15pt regular rounded.
-- **Color contrast**: Running state uses accent color (orange), paused uses semi-transparent white (opacity 0.6 for icons, 0.4 for gauge tint).
 
 ### Notification & Timer Logic
 - **Phase transition**: When a Pomodoro phase ends, always auto-advance to the next phase. Do NOT auto-start timer - let user decide via system notification button or manual start button.
