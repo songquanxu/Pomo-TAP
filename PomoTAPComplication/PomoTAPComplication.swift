@@ -8,7 +8,8 @@
 import WidgetKit
 import SwiftUI
 import os
-import WatchKit
+
+#if os(watchOS)
 
 // MARK: - 日志
 private let logger = Logger(
@@ -227,33 +228,39 @@ struct CircularComplicationView: View {
     var entry: ComplicationEntry
 
     var body: some View {
-        if entry.state.isInFlow {
-            // Flow mode: show infinity icon with full ring
-            Gauge(value: 1.0, in: 0...1) {
+        ZStack {
+            AccessoryWidgetBackground()
+            Gauge(value: gaugeProgress, in: 0...1) {
             } currentValueLabel: {
-                Image(systemName: "infinity")
+                Image(systemName: entry.state.isInFlow ? "infinity" : phaseSymbol(for: entry.state))
                     .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(.yellow)
+                    .foregroundStyle(iconColor)
                     .widgetAccentable()
             }
             .gaugeStyle(.accessoryCircularCapacity)
-            .tint(.yellow)
-            .containerBackground(.clear, for: .widget)
-            .widgetURL(URL(string: "pomoTAP://open")!)
-        } else {
-            // Normal countdown mode: show phase icon with progress ring
-            Gauge(value: entry.state.progress, in: 0...1) {
-            } currentValueLabel: {
-                Image(systemName: phaseSymbol(for: entry.state))
-                    .font(.system(size: 20, weight: .medium))
-                    .foregroundStyle(entry.state.isRunning ? .orange : .white.opacity(0.6))
-                    .widgetAccentable()
-            }
-            .gaugeStyle(.accessoryCircularCapacity)
-            .tint(entry.state.isRunning ? .orange : .white.opacity(0.4))
-            .containerBackground(.clear, for: .widget)
-            .widgetURL(URL(string: "pomoTAP://open")!)
+            .tint(ringColor)
         }
+        .containerBackground(.clear, for: .widget)
+        .widgetURL(URL(string: "pomoTAP://open")!)
+    }
+
+    private var gaugeProgress: Double {
+        let baseProgress = entry.state.isInFlow ? 1.0 : entry.state.progressValueForGauge
+        return min(max(baseProgress, 0.0), 1.0)
+    }
+
+    private var ringColor: Color {
+        if entry.state.isInFlow {
+            return .yellow
+        }
+        return entry.state.isRunning ? .orange : .white.opacity(0.4)
+    }
+
+    private var iconColor: Color {
+        if entry.state.isInFlow {
+            return .yellow
+        }
+        return entry.state.isRunning ? .orange : .white.opacity(0.6)
     }
 }
 
@@ -307,7 +314,7 @@ struct CornerComplicationView: View {
                 .widgetAccentable()
         }
         .widgetLabel {
-            ProgressView(value: entry.state.progressValueForGauge) { }
+            ProgressView(value: entry.state.progressValueForGauge, total: 1.0)
                 .tint(entry.state.isRunning ? .orange : .white.opacity(0.4))
         }
         .widgetURL(URL(string: "pomoTAP://open")!)
@@ -438,3 +445,55 @@ private extension ComplicationDisplayState {
         )
     }
 }
+
+// MARK: - Widget Entry View
+struct PomoTAPComplicationView: View {
+    @Environment(\.widgetFamily) private var widgetFamily
+    var entry: ComplicationEntry
+
+    var body: some View {
+        switch widgetFamily {
+        case .accessoryCircular:
+            CircularComplicationView(entry: entry)
+        case .accessoryRectangular:
+            RectangularComplicationView(entry: entry)
+        case .accessoryInline:
+            InlineComplicationView(entry: entry)
+        case .accessoryCorner:
+            CornerComplicationView(entry: entry)
+        default:
+            CircularComplicationView(entry: entry)
+        }
+    }
+}
+
+// MARK: - Widget Definition
+struct PomoTAPComplication: Widget {
+    private let kind = "PomoTAPComplication"
+
+    var body: some WidgetConfiguration {
+        StaticConfiguration(kind: kind, provider: Provider()) { entry in
+            PomoTAPComplicationView(entry: entry)
+        }
+        .configurationDisplayName(NSLocalizedString("Focus", comment: ""))
+        .description("Pomodoro timer")
+        .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline, .accessoryCorner])
+        .containerBackgroundRemovable(true)
+    }
+}
+
+// MARK: - Widget Bundle
+@main
+struct PomoTAPWidgetBundle: WidgetBundle {
+    var body: some Widget {
+        PomoTAPComplication()
+        QuickStartWorkWidget()
+        QuickStartBreakWidget()
+        CycleProgressWidget()
+        StatsWidget()
+        NextPhaseWidget()
+        SmartStackWidget()
+    }
+}
+
+#endif

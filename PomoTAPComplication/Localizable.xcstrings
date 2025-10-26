@@ -892,6 +892,9 @@
         }
       }
     },
+    "Pomodoro timer" : {
+
+    },
     "Quick_Start_Break" : {
       "comment" : "快速开始休息",
       "localizations" : {
