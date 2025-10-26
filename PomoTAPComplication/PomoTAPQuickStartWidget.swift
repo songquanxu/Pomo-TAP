@@ -30,9 +30,9 @@ enum QuickStartAction {
     var symbol: String {
         switch self {
         case .startWork:
-            return "brain.head.profile.fill"
+            return "wand.and.sparkles"
         case .startBreak:
-            return "cup.and.saucer.fill"
+            return "cup.and.heat.waves"
         }
     }
 
