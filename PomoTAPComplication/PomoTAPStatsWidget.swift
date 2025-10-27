@@ -83,6 +83,7 @@ struct StatsInlineView: View {
         // HIG standard: 15pt regular rounded
         Text("🍅 \(entry.completedCycles) · \(NSLocalizedString("Completed_Cycles", comment: ""))")
             .font(WidgetTypography.Inline.text)
+            .containerBackground(.clear, for: .widget)
             .widgetURL(URL(string: "pomoTAP://open")!)
     }
 }

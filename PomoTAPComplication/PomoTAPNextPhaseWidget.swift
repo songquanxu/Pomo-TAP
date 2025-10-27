@@ -112,6 +112,7 @@ struct NextPhaseWidgetView: View {
     var body: some View {
         Text(displayText(for: entry.state))
             .font(WidgetTypography.Inline.text)
+            .containerBackground(.clear, for: .widget)
             .widgetURL(URL(string: "pomoTAP://open")!)
     }
 

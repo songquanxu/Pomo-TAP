@@ -165,6 +165,7 @@ struct SmartStackWidgetView: View {
             cycleSection
         }
         .padding(.vertical, 4)
+        .containerBackground(.clear, for: .widget)
         .widgetURL(URL(string: "pomoTAP://open")!)
     }
 

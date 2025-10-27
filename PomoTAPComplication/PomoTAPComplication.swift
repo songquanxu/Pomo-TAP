@@ -316,6 +316,7 @@ struct RectangularComplicationView: View {
         }
         .padding(.vertical, 2)
         .padding(.horizontal, 4)
+        .containerBackground(.clear, for: .widget)
         .widgetURL(URL(string: "pomoTAP://open")!)
     }
 
@@ -402,6 +403,7 @@ struct InlineComplicationView: View {
     var body: some View {
         Text(inlineText(for: entry.state))
             .font(.system(size: 15, weight: .medium, design: .rounded))
+            .containerBackground(.clear, for: .widget)
             .widgetURL(URL(string: "pomoTAP://open")!)
     }
 }
