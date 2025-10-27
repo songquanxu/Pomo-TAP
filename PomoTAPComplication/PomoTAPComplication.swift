@@ -7,6 +7,7 @@
 
 import WidgetKit
 import SwiftUI
+import AppIntents
 import os
 
 #if os(watchOS)
@@ -39,7 +40,11 @@ struct Provider: TimelineProvider {
             flowStartDate: nil,
             currentPhaseName: "Work",
             nextPhaseName: "Short Break",
-            nextPhaseDuration: 5 * 60
+            nextPhaseDuration: 5 * 60,
+            completedCycles: 2,
+            hasSkippedInCurrentCycle: false,
+            phaseStatuses: [.current, .notStarted, .notStarted, .notStarted],
+            phaseDurations: [25, 5, 25, 15]
         )
         return ComplicationEntry(date: Date(), state: sampleState, relevance: TimelineEntryRelevance(score: 10))
     }
@@ -268,27 +273,126 @@ struct RectangularComplicationView: View {
     var entry: ComplicationEntry
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 3) {
-            HStack(spacing: 5) {
-                Image(systemName: phaseSymbol(for: entry.state))
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(entry.state.isRunning ? .orange : .white.opacity(0.6))
-                    .widgetAccentable()
-                Text(phaseName(for: entry.state))
-                    .font(.system(size: 13, weight: .semibold, design: .rounded))
-                    .foregroundStyle(entry.state.isRunning ? .primary : .secondary)
-                Spacer()
+        HStack(alignment: .center, spacing: 8) {
+            // 左侧：Gauge + Button（交互）
+            Button(intent: ToggleTimerIntent()) {
+                Gauge(value: gaugeProgress, in: 0...1) {
+                } currentValueLabel: {
+                    Image(systemName: buttonIcon)
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundStyle(iconColor)
+                }
+                .gaugeStyle(.accessoryCircularCapacity)
+                .tint(ringColor)
             }
-            Text(primaryTimeText(for: entry.state))
-                .font(.system(size: 24, weight: .semibold, design: .rounded))
-                .foregroundStyle(entry.state.isRunning ? .primary : .secondary)
-                .lineLimit(1)
-            ProgressView(value: entry.state.progressValueForGauge)
-                .tint(entry.state.isRunning ? .orange : .white.opacity(0.4))
-                .frame(height: 4)
+            .buttonStyle(.plain)
+            .frame(width: 42, height: 42)
+
+            // 右侧：信息区域（通过 widgetURL 打开 app）
+            VStack(alignment: .leading, spacing: 3) {
+                // 第一行：软件名 + 成就
+                HStack {
+                    Text(appName)
+                        .font(.system(size: 11, weight: .medium))
+
+                    Spacer()
+
+                    Label("×\(entry.state.completedCycles)", systemImage: "medal.fill")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(medalColor)
+                }
+
+                // 第二行：阶段时长 + 心流
+                HStack {
+                    phaseDurationIndicators
+
+                    Spacer()
+
+                    Image(systemName: "infinity")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(flowIndicatorColor)
+                }
+            }
         }
         .padding(.vertical, 2)
+        .padding(.horizontal, 4)
         .widgetURL(URL(string: "pomoTAP://open")!)
+    }
+
+    // MARK: - 左侧 Gauge 相关
+
+    private var gaugeProgress: Double {
+        min(max(entry.state.progressValueForGauge, 0.0), 1.0)
+    }
+
+    private var buttonIcon: String {
+        entry.state.isRunning ? "pause.fill" : "play.fill"
+    }
+
+    private var ringColor: Color {
+        if entry.state.isInFlow {
+            return .yellow
+        }
+        return entry.state.isRunning ? .orange : .white.opacity(0.35)
+    }
+
+    private var iconColor: Color {
+        if entry.state.isInFlow {
+            return .yellow
+        }
+        return entry.state.isRunning ? .orange : .white.opacity(0.6)
+    }
+
+    // MARK: - 右侧信息区域相关
+
+    private var appName: String {
+        NSLocalizedString("App_Name", comment: "")
+    }
+
+    private var medalColor: Color {
+        entry.state.hasSkippedInCurrentCycle ? .green : .orange
+    }
+
+    private var flowIndicatorColor: Color {
+        entry.state.isInFlow ? .yellow : .gray.opacity(0.5)
+    }
+
+    // MARK: - 阶段时长指示器
+
+    private var phaseDurationIndicators: some View {
+        HStack(spacing: 4) {
+            ForEach(Array(displayedPhaseData.enumerated()), id: \.offset) { index, phaseData in
+                Text("\(phaseData.duration)")
+                    .font(.system(size: 13, weight: .bold, design: .rounded))
+                    .foregroundStyle(phaseColor(for: phaseData.status))
+            }
+        }
+    }
+
+    private var displayedPhaseData: [(duration: Int, status: PhaseCompletionStatus)] {
+        let durations = entry.state.phaseDurations
+        let statuses = entry.state.phaseStatuses
+
+        // 确保两个数组长度一致
+        let count = min(durations.count, statuses.count, 4)  // 最多显示4个阶段
+
+        return (0..<count).map { index in
+            (duration: durations[index], status: statuses[index])
+        }
+    }
+
+    private func phaseColor(for status: PhaseCompletionStatus) -> Color {
+        switch status {
+        case .current:
+            // 当前阶段：流模式时黄色，否则橙色
+            return entry.state.isInFlow ? .yellow : .orange
+        case .normalCompleted:
+            return .orange
+        case .skipped:
+            return .green
+        case .notStarted:
+            return .white.opacity(0.4)
+        }
     }
 }
 
@@ -424,7 +528,11 @@ private extension ComplicationDisplayState {
             flowStartDate: flowStartDate,
             currentPhaseName: currentPhaseName,
             nextPhaseName: nextPhaseName,
-            nextPhaseDuration: nextPhaseDuration
+            nextPhaseDuration: nextPhaseDuration,
+            completedCycles: completedCycles,
+            hasSkippedInCurrentCycle: hasSkippedInCurrentCycle,
+            phaseStatuses: phaseStatuses,
+            phaseDurations: phaseDurations
         )
     }
 
@@ -441,7 +549,11 @@ private extension ComplicationDisplayState {
             flowStartDate: flowStartDate,
             currentPhaseName: currentPhaseName,
             nextPhaseName: nextPhaseName,
-            nextPhaseDuration: nextPhaseDuration
+            nextPhaseDuration: nextPhaseDuration,
+            completedCycles: completedCycles,
+            hasSkippedInCurrentCycle: hasSkippedInCurrentCycle,
+            phaseStatuses: phaseStatuses,
+            phaseDurations: phaseDurations
         )
     }
 }
@@ -489,7 +601,6 @@ struct PomoTAPWidgetBundle: WidgetBundle {
         PomoTAPComplication()
         QuickStartWorkWidget()
         QuickStartBreakWidget()
-        CycleProgressWidget()
         StatsWidget()
         NextPhaseWidget()
         SmartStackWidget()

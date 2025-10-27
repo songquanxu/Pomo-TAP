@@ -26,7 +26,8 @@ struct NextPhaseEntry: TimelineEntry {
             hasSkippedInCurrentCycle: false,
             phaseStatuses: [.current, .notStarted, .notStarted, .notStarted],
             nextPhaseName: "Short Break",
-            nextPhaseDuration: 5 * 60
+            nextPhaseDuration: 5 * 60,
+            phaseDurations: [25, 5, 25, 15]
         )
         return NextPhaseEntry(date: Date(), state: sampleState)
     }

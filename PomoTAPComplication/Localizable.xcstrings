@@ -35,8 +35,12 @@
         }
       }
     },
+    "×%lld" : {
+
+    },
     "🍅" : {
       "comment" : "番茄emoji",
+      "extractionState" : "stale",
       "localizations" : {
         "en" : {
           "stringUnit" : {
@@ -111,6 +115,41 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "操作執行失敗"
+          }
+        }
+      }
+    },
+    "App_Name" : {
+      "comment" : "应用名称",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pomo TAP"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "捏捏番茄"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "捏捏番茄"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "捏捏番茄"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "捏捏番茄"
           }
         }
       }

@@ -11,7 +11,12 @@ struct WidgetStateAdapter {
 
     // MARK: - Complication Model
     func makeComplicationState() -> ComplicationDisplayState {
-        ComplicationDisplayState(
+        // 提取每个阶段的时长（分钟）
+        let phaseDurations = state.phases.map { phase in
+            phase.duration / 60  // 转换秒为分钟
+        }
+
+        return ComplicationDisplayState(
             displayMode: state.displayMode,
             phaseType: state.currentPhaseType,
             isRunning: state.timerRunning,
@@ -23,13 +28,22 @@ struct WidgetStateAdapter {
             flowStartDate: state.flowStartDate,
             currentPhaseName: state.currentPhaseName,
             nextPhaseName: nextPhase()?.name,
-            nextPhaseDuration: nextPhase()?.duration ?? 0
+            nextPhaseDuration: nextPhase()?.duration ?? 0,
+            completedCycles: state.completedCycles,
+            hasSkippedInCurrentCycle: state.hasSkippedInCurrentCycle,
+            phaseStatuses: state.phaseCompletionStatus,
+            phaseDurations: phaseDurations
         )
     }
 
     // MARK: - Smart Stack Model
     func makeSmartStackState() -> SmartStackDisplayState {
-        SmartStackDisplayState(
+        // 提取每个阶段的时长（分钟）
+        let phaseDurations = state.phases.map { phase in
+            phase.duration / 60  // 转换秒为分钟
+        }
+
+        return SmartStackDisplayState(
             displayMode: state.displayMode,
             phaseType: state.currentPhaseType,
             phaseName: state.currentPhaseName,
@@ -41,7 +55,8 @@ struct WidgetStateAdapter {
             hasSkippedInCurrentCycle: state.hasSkippedInCurrentCycle,
             phaseStatuses: state.phaseCompletionStatus,
             nextPhaseName: nextPhase()?.name,
-            nextPhaseDuration: nextPhase()?.duration ?? 0
+            nextPhaseDuration: nextPhase()?.duration ?? 0,
+            phaseDurations: phaseDurations
         )
     }
 
@@ -67,6 +82,10 @@ struct ComplicationDisplayState {
     let currentPhaseName: String
     let nextPhaseName: String?
     let nextPhaseDuration: Int
+    let completedCycles: Int
+    let hasSkippedInCurrentCycle: Bool
+    let phaseStatuses: [PhaseCompletionStatus]
+    let phaseDurations: [Int]  // 每个阶段的时长（分钟）
 
     var isInFlow: Bool {
         displayMode == .flow
@@ -91,6 +110,7 @@ struct SmartStackDisplayState {
     let phaseStatuses: [PhaseCompletionStatus]
     let nextPhaseName: String?
     let nextPhaseDuration: Int
+    let phaseDurations: [Int]  // 每个阶段的时长（分钟）
 
     var isInFlow: Bool {
         displayMode == .flow
@@ -128,7 +148,8 @@ extension SmartStackDisplayState {
             hasSkippedInCurrentCycle: hasSkippedInCurrentCycle,
             phaseStatuses: phaseStatuses,
             nextPhaseName: nextPhaseName,
-            nextPhaseDuration: nextPhaseDuration
+            nextPhaseDuration: nextPhaseDuration,
+            phaseDurations: phaseDurations
         )
     }
 
@@ -145,7 +166,8 @@ extension SmartStackDisplayState {
             hasSkippedInCurrentCycle: hasSkippedInCurrentCycle,
             phaseStatuses: phaseStatuses,
             nextPhaseName: nextPhaseName,
-            nextPhaseDuration: nextPhaseDuration
+            nextPhaseDuration: nextPhaseDuration,
+            phaseDurations: phaseDurations
         )
     }
 }

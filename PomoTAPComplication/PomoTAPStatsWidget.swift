@@ -75,35 +75,6 @@ struct StatsProvider: TimelineProvider {
 // MARK: - Stats Views
 
 // Rectangular View
-struct StatsRectangularView: View {
-    var entry: StatsEntry
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 2) {
-            // Title - HIG standard: 13pt semibold
-            HStack(spacing: 4) {
-                Image(systemName: entry.hasSkipped ? "star.fill" : "star.circle.fill")
-                    .font(WidgetTypography.Rectangular.title)
-                Text(NSLocalizedString("Completed_Cycles", comment: ""))
-                    .font(WidgetTypography.Rectangular.title)
-                Spacer()
-            }
-            .foregroundStyle(entry.hasSkipped ? .green : .orange)
-
-            // Cycle count - HIG standard: 26pt bold rounded for large numbers
-            HStack(alignment: .firstTextBaseline, spacing: 4) {
-                Text("\(entry.completedCycles)")
-                    .font(WidgetTypography.Rectangular.largeNumber)
-                    .foregroundStyle(.primary)
-                Text("🍅")
-                    .font(.system(size: 18))
-            }
-        }
-        .containerBackground(.clear, for: .widget)
-        .widgetURL(URL(string: "pomoTAP://open")!)
-    }
-}
-
 // Inline View
 struct StatsInlineView: View {
     var entry: StatsEntry
@@ -122,14 +93,7 @@ struct StatsWidgetView: View {
     @Environment(\.widgetFamily) var family
 
     var body: some View {
-        switch family {
-        case .accessoryRectangular:
-            StatsRectangularView(entry: entry)
-        case .accessoryInline:
-            StatsInlineView(entry: entry)
-        default:
-            StatsRectangularView(entry: entry)
-        }
+        StatsInlineView(entry: entry)
     }
 }
 
@@ -143,7 +107,7 @@ struct StatsWidget: Widget {
         }
         .configurationDisplayName(NSLocalizedString("Completed_Cycles", comment: ""))
         .description(NSLocalizedString("Widget_Stats_Desc", comment: ""))
-        .supportedFamilies([.accessoryRectangular, .accessoryInline])
+        .supportedFamilies([.accessoryInline])
         .containerBackgroundRemovable(true)
     }
 }
