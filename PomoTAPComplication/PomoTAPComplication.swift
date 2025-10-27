@@ -270,6 +270,7 @@ struct CircularComplicationView: View {
 }
 
 struct RectangularComplicationView: View {
+    @Environment(\.widgetRenderingMode) var renderingMode
     var entry: ComplicationEntry
 
     var body: some View {
@@ -363,9 +364,24 @@ struct RectangularComplicationView: View {
     private var phaseDurationIndicators: some View {
         HStack(spacing: 4) {
             ForEach(Array(displayedPhaseData.enumerated()), id: \.offset) { index, phaseData in
-                Text("\(phaseData.duration)")
-                    .font(.system(size: 13, weight: .bold, design: .rounded))
-                    .foregroundStyle(phaseColor(for: phaseData.status))
+                VStack(spacing: 1) {
+                    // 数字部分
+                    Text("\(phaseData.duration)")
+                        .font(phaseFont(for: phaseData.status))
+                        .foregroundStyle(phaseColor(for: phaseData.status))
+                        .widgetAccentable(shouldAccent(for: phaseData.status))
+
+                    // accented 模式下：当前阶段显示圆点
+                    if renderingMode == .accented && phaseData.status == .current {
+                        Circle()
+                            .fill(Color.primary)
+                            .frame(width: 3, height: 3)
+                            .widgetAccentable()
+                    } else {
+                        // 占位空间，保持视觉对齐
+                        Color.clear.frame(width: 3, height: 3)
+                    }
+                }
             }
         }
     }
@@ -382,18 +398,63 @@ struct RectangularComplicationView: View {
         }
     }
 
+    private func phaseFont(for status: PhaseCompletionStatus) -> Font {
+        // accented 模式：用字体粗细区分状态
+        if renderingMode == .accented {
+            switch status {
+            case .current:
+                // 当前：常规字体（因为有圆点标记）
+                return .system(size: 13, weight: .semibold, design: .rounded)
+            case .normalCompleted:
+                // 已完成：加粗字体
+                return .system(size: 13, weight: .bold, design: .rounded)
+            case .skipped, .notStarted:
+                // 跳过/未开始：常规字体
+                return .system(size: 13, weight: .regular, design: .rounded)
+            }
+        }
+
+        // fullColor 模式：统一字体
+        return .system(size: 13, weight: .bold, design: .rounded)
+    }
+
     private func phaseColor(for status: PhaseCompletionStatus) -> Color {
+        // fullColor 模式：完整配色方案（与主界面一致）
+        if renderingMode == .fullColor {
+            switch status {
+            case .current:
+                // 当前阶段：流模式时黄色，否则白色
+                return entry.state.isInFlow ? .yellow : .white
+            case .normalCompleted:
+                return .orange
+            case .skipped:
+                return .green
+            case .notStarted:
+                return .gray.opacity(0.4)
+            }
+        }
+
+        // accented 模式：用不透明度区分（系统会自动应用表盘强调色）
         switch status {
         case .current:
-            // 当前阶段：流模式时黄色，否则橙色
-            return entry.state.isInFlow ? .yellow : .orange
+            return .primary.opacity(1.0)  // 圆点会标记，保持最高亮度
         case .normalCompleted:
-            return .orange
+            return .primary.opacity(0.9)  // 稍微暗一点
         case .skipped:
-            return .green
+            return .primary.opacity(0.7)  // 更暗
         case .notStarted:
-            return .white.opacity(0.4)
+            return .primary.opacity(0.4)  // 最暗
         }
+    }
+
+    private func shouldAccent(for status: PhaseCompletionStatus) -> Bool {
+        // 在 accented 模式下，有意义的阶段都接受强调色
+        // 在 fullColor 模式下，不需要 widgetAccentable（我们自己控制颜色）
+        if renderingMode == .accented {
+            // 未开始阶段不接受强调色，其他状态都接受
+            return status != .notStarted
+        }
+        return false
     }
 }
 
