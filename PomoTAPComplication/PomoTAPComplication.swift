@@ -605,7 +605,6 @@ struct PomoTAPWidgetBundle: WidgetBundle {
         QuickStartBreakWidget()
         StatsWidget()
         NextPhaseWidget()
-        SmartStackWidget()
     }
 }
 
