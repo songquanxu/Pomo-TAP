@@ -37,6 +37,7 @@ class TimerModel: NSObject, ObservableObject {
     @Published var infiniteElapsedTime: Int = 0  // 心流模式下的已过时间（秒）
     @Published var isInFlowCountUp: Bool = false  // 当前是否处于心流正计时状态
     @Published var enableRepeatNotifications: Bool = true  // 重复提醒开关（默认开启）
+    @Published var enableFinalCountdownHaptics: Bool = true  // 最后 5 秒震动开关（默认开启）
 
     // MARK: - Private Properties
     private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "TimerModel")
@@ -45,6 +46,7 @@ class TimerModel: NSObject, ObservableObject {
 
     // MARK: - Constants
     private let repeatNotificationsKey = "enableRepeatNotifications"  // UserDefaults 键
+    private let finalCountdownHapticsKey = "enableFinalCountdownHaptics"  // UserDefaults 键
 
     // MARK: - Phase Transition Source
     private enum PhaseTransitionSource: String, CaseIterable {
@@ -71,6 +73,11 @@ class TimerModel: NSObject, ObservableObject {
         // 从 UserDefaults 加载重复提醒设置
         if let savedValue = UserDefaults.standard.object(forKey: repeatNotificationsKey) as? Bool {
             self.enableRepeatNotifications = savedValue
+        }
+
+        // 从 UserDefaults 加载最后 5 秒震动设置
+        if let savedValue = UserDefaults.standard.object(forKey: finalCountdownHapticsKey) as? Bool {
+            self.enableFinalCountdownHaptics = savedValue
         }
 
         // 设置代理
@@ -390,6 +397,11 @@ class TimerModel: NSObject, ObservableObject {
             self?.timerCore.isInfiniteMode = newValue
         }.store(in: &cancellables)
 
+        // 绑定最后 5 秒震动开关到计时器核心
+        $enableFinalCountdownHaptics.sink { [weak self] newValue in
+            self?.timerCore.enableFinalCountdownHaptics = newValue
+        }.store(in: &cancellables)
+
         // 监听心流模式开关变化，处理心流正计时状态下的关闭
         $isInfiniteMode.sink { [weak self] isEnabled in
             guard let self = self else { return }
@@ -414,6 +426,13 @@ class TimerModel: NSObject, ObservableObject {
                     self.logger.info("已取消所有待发送的重复通知")
                 }
             }
+        }.store(in: &cancellables)
+
+        // 监听最后 5 秒震动开关变化，保存到 UserDefaults
+        $enableFinalCountdownHaptics.sink { [weak self] newValue in
+            guard let self = self else { return }
+            UserDefaults.standard.set(newValue, forKey: self.finalCountdownHapticsKey)
+            self.logger.info("最后 5 秒震动设置已保存: \(newValue)")
         }.store(in: &cancellables)
     }
 

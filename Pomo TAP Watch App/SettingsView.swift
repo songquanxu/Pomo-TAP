@@ -33,6 +33,19 @@ struct SettingsView: View {
                         }
                     }
                 }
+
+                Toggle(isOn: $timerModel.enableFinalCountdownHaptics) {
+                    HStack {
+                        Image(systemName: "waveform.badge.magnifyingglass")
+                            .foregroundColor(.cyan)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text(NSLocalizedString("Final_Countdown_Haptics", comment: ""))
+                            Text(NSLocalizedString("Final_Countdown_Haptics_Desc", comment: ""))
+                                .font(.system(size: 11))
+                                .foregroundColor(.secondary)
+                        }
+                    }
+                }
             }
             .navigationTitle(NSLocalizedString("Settings", comment: ""))
         }

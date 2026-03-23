@@ -11,6 +11,7 @@ class TimerCore: NSObject, ObservableObject {
     @Published var remainingTime: Int = 0
     @Published var timerRunning: Bool = false
     @Published var totalTime: Int = 0
+    @Published var enableFinalCountdownHaptics: Bool = true
     @Published var isInfiniteMode: Bool = false  // 心流模式开关
     @Published var infiniteElapsedTime: Int = 0  // 心流模式下的已过时间
     @Published var isInFlowCountUp: Bool = false  // 当前是否处于心流正计时状态
@@ -51,6 +52,7 @@ class TimerCore: NSObject, ObservableObject {
     private var startTime: Date?
     private var endTime: Date?
     private var pausedRemainingTime: Int?
+    private var lastCountdownHapticSecond: Int?
 
     // MARK: - Exposed Timing Metadata
     var countdownEndDate: Date? {
@@ -94,6 +96,10 @@ class TimerCore: NSObject, ObservableObject {
     // MARK: - Public Methods
     func startTimer() async {
         guard !timerRunning else { return }
+
+        if remainingTime > 5 || remainingTime <= 0 {
+            lastCountdownHapticSecond = nil
+        }
 
         // 如果有暂停的剩余时间，使用它；否则使用当前的remainingTime
         if let pausedTime = pausedRemainingTime {
@@ -152,6 +158,7 @@ class TimerCore: NSObject, ObservableObject {
         startTime = nil
         endTime = nil
         pausedRemainingTime = nil
+        lastCountdownHapticSecond = nil
     }
 
     func clearPausedState() {
@@ -176,6 +183,7 @@ class TimerCore: NSObject, ObservableObject {
         // 进入心流正计时模式
         isInFlowCountUp = true
         infiniteElapsedTime = 0
+        lastCountdownHapticSecond = nil
         startTime = Date()
         endTime = nil
         logger.info("进入心流正计时模式")
@@ -186,6 +194,7 @@ class TimerCore: NSObject, ObservableObject {
         isInFlowCountUp = false
         let elapsed = infiniteElapsedTime
         infiniteElapsedTime = 0
+        lastCountdownHapticSecond = nil
         logger.info("退出心流正计时模式，已过时间: \(elapsed) 秒")
         return elapsed
     }
@@ -240,9 +249,18 @@ class TimerCore: NSObject, ObservableObject {
                 let previousTime = self.remainingTime
                 self.remainingTime = newRemainingTime
 
+                if enableFinalCountdownHaptics,
+                   (1...5).contains(newRemainingTime),
+                   lastCountdownHapticSecond != newRemainingTime {
+                    lastCountdownHapticSecond = newRemainingTime
+                    WKInterfaceDevice.current().play(.click)
+                    logger.debug("最后 5 秒震动提醒: \(newRemainingTime)")
+                }
+
                 // 如果时间到达零，停止计时器并触发异步回调
                 if newRemainingTime == 0 {
                     stopTimer()
+                    lastCountdownHapticSecond = nil
                     logger.info("计时器自然结束")
 
                     // 使用 Task 确保异步回调在主线程安全执行

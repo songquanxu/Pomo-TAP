@@ -247,6 +247,76 @@
         }
       }
     },
+    "Final_Countdown_Haptics" : {
+      "comment" : "最后 5 秒震动开关",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Final 5-Second Haptics"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最後の5秒の触覚通知"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마지막 5초 햅틱"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最后 5 秒震动"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最後 5 秒震動"
+          }
+        }
+      }
+    },
+    "Final_Countdown_Haptics_Desc" : {
+      "comment" : "最后 5 秒震动功能描述",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Vibrate once per second during the last 5 seconds"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "残り5秒で毎秒1回振動します"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "마지막 5초 동안 매초 한 번 진동합니다"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "倒计时最后 5 秒，每秒震动一次"
+          }
+        },
+        "zh-Hant" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "倒計時最後 5 秒，每秒震動一次"
+          }
+        }
+      }
+    },
     "Great_Job" : {
       "comment" : "通知标题：完成一个番茄时显示",
       "localizations" : {
