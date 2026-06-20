@@ -67,6 +67,11 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
                 content.threadIdentifier = "PomoTAP_Notifications"
                 content.categoryIdentifier = "PHASE_COMPLETED"
 
+                // 标记此通知对应的“正在倒计时的阶段”索引：响应时据此精确判断是否需要推进，
+                // 消除 “remainingTime == totalTime” 启发式在 reset/skip/快捷启动后的阶段误判。
+                let scheduledPhaseIndex = timerModel?.currentPhaseIndex ?? 0
+                content.userInfo = ["scheduledPhaseIndex": scheduledPhaseIndex]
+
                 switch event {
                 case .phaseCompleted:
                     content.title = NSLocalizedString("Great_Job", comment: "")
@@ -110,7 +115,8 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
                     await repeatManager.scheduleRepeatNotifications(
                         initialDelay: TimeInterval(currentPhaseDurationSeconds),
                         title: content.title,
-                        body: content.body
+                        body: content.body,
+                        scheduledPhaseIndex: scheduledPhaseIndex
                     )
                     logger.info("已启用重复提醒功能")
                 }
@@ -133,9 +139,11 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         withCompletionHandler completionHandler: @escaping () -> Void
     ) {
         if response.actionIdentifier == "START_NEXT_PHASE" {
+            // 在 nonisolated 上下文同步取出 Sendable 的 Int，避免把非 Sendable 的 userInfo 字典捕获进 @MainActor Task
+            let scheduledPhaseIndex = response.notification.request.content.userInfo["scheduledPhaseIndex"] as? Int
             Task(priority: .userInitiated) { [weak self] in
                 guard let self = self else { return }
-                await self.timerModel?.handleNotificationResponse()
+                await self.timerModel?.handleNotificationResponse(scheduledPhaseIndex: scheduledPhaseIndex)
             }
         }
         completionHandler()

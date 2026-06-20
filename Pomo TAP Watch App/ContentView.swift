@@ -34,9 +34,9 @@ struct ContentView: View {
             Task {
                 switch newPhase {
                 case .active:
-                    if oldPhase == .background {
-                        await timerModel.appBecameActive()
-                    }
+                    // 任意 →active 都刷新（含 .inactive→.active，如抬腕唤醒）；
+                    // appBecameActive() 仅重新发布共享状态且内部已节流，幂等安全
+                    await timerModel.appBecameActive()
                 case .background:
                     timerModel.appEnteredBackground()
                 default:
@@ -241,9 +241,13 @@ struct ContentView: View {
         } else if timerModel.isInFlowCountUp {
             // 心流正计时模式：显示完整圆环（100%）
             progress = 1.0
-        } else {
+        } else if timerModel.totalTime > 0 {
             // 普通模式：直接使用剩余时间和总时间的比例来计算进度
             progress = 1 - CGFloat(timerModel.remainingTime) / CGFloat(timerModel.totalTime)
+        } else {
+            // 防御：totalTime 在启动瞬间可能仍为 0（Combine 绑定尚未就绪），
+            // 避免 0/0 = NaN 流入 Circle().trim 几何与动画
+            progress = 0
         }
 
         let ring = Circle()
@@ -316,14 +320,18 @@ struct ContentView: View {
     private func phaseIndicators() -> some View {
         HStack(spacing: 5) {
             ForEach(0..<timerModel.phases.count, id: \.self) { index in
-                PhaseIndicator(
-                    status: timerModel.phaseCompletionStatus[index],
-                    duration: timerModel.phases[index].duration,
-                    adjustedDuration: timerModel.phases[index].adjustedDuration ?? (index == timerModel.currentPhaseIndex ? timerModel.adjustedPhaseDuration : nil),
-                    isCycleCompleted: timerModel.currentCycleCompleted && index != 0,
-                    isInFlowCountUp: timerModel.isInFlowCountUp && index == timerModel.currentPhaseIndex,
-                    infiniteElapsedTime: timerModel.infiniteElapsedTime
-                )
+                // 防御：phases 与 phaseCompletionStatus 由各自独立的 Combine 管道驱动，
+                // 用 safe 下标避免极端时序下两者计数短暂不一致导致的越界崩溃
+                if let status = timerModel.phaseCompletionStatus[safe: index] {
+                    PhaseIndicator(
+                        status: status,
+                        duration: timerModel.phases[index].duration,
+                        adjustedDuration: timerModel.phases[index].adjustedDuration ?? (index == timerModel.currentPhaseIndex ? timerModel.adjustedPhaseDuration : nil),
+                        isCycleCompleted: timerModel.currentCycleCompleted && index != 0,
+                        isInFlowCountUp: timerModel.isInFlowCountUp && index == timerModel.currentPhaseIndex,
+                        infiniteElapsedTime: timerModel.infiniteElapsedTime
+                    )
+                }
             }
         }
     }
@@ -360,12 +368,13 @@ struct ContentView: View {
             return String(format: "%02d:--", minutes)
         } else {
             // 普通倒计时模式
-            if time > 60 {
-                // 剩余时间 > 1 分钟：显示 mm:--
+            if time >= 60 {
+                // 剩余时间 ≥ 1 分钟：显示 mm:--
+                // 用 ≥ 而非 >：剩 60 秒时应显示 "01:--"，旧的 > 会落入 :ss 分支显示 ":00"（看似归零）
                 let minutes = time / 60
                 return String(format: "%02d:--", minutes)
             } else {
-                // 剩余时间 <= 1 分钟：显示 :ss
+                // 剩余时间 < 1 分钟：显示 :ss
                 let seconds = time % 60
                 return String(format: ":%02d", seconds)
             }

@@ -18,10 +18,12 @@ class NotificationRepeatManager: ObservableObject {
     ///   - initialDelay: 第一次通知的延迟时间（秒）
     ///   - title: 通知标题
     ///   - body: 通知内容
+    ///   - scheduledPhaseIndex: 此通知对应的倒计时阶段索引（与主通知一致，供响应时精确判断推进）
     func scheduleRepeatNotifications(
         initialDelay: TimeInterval,
         title: String,
-        body: String
+        body: String,
+        scheduledPhaseIndex: Int
     ) async {
         do {
             // 检查通知权限
@@ -47,7 +49,8 @@ class NotificationRepeatManager: ObservableObject {
                 let content = createRepeatNotificationContent(
                     title: title,
                     body: body,
-                    repeatIndex: index
+                    repeatIndex: index,
+                    scheduledPhaseIndex: scheduledPhaseIndex
                 )
 
                 // 创建精确触发器
@@ -80,7 +83,8 @@ class NotificationRepeatManager: ObservableObject {
     private func createRepeatNotificationContent(
         title: String,
         body: String,
-        repeatIndex: Int
+        repeatIndex: Int,
+        scheduledPhaseIndex: Int
     ) -> UNMutableNotificationContent {
         let content = UNMutableNotificationContent()
 
@@ -102,6 +106,8 @@ class NotificationRepeatManager: ObservableObject {
         content.relevanceScore = 0.9  // 高相关性（比主通知更高）
         content.threadIdentifier = "PomoTAP_Notifications"
         content.categoryIdentifier = "PHASE_COMPLETED"
+        // 与主通知一致的阶段印章：点击重复通知的动作时也能精确路由
+        content.userInfo = ["scheduledPhaseIndex": scheduledPhaseIndex]
 
         return content
     }

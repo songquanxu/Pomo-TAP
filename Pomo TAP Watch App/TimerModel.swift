@@ -198,7 +198,11 @@ class TimerModel: NSObject, ObservableObject {
         logger.info("用户跳过当前阶段并自动开始下一阶段")
     }
 
-    func handleNotificationResponse() async {
+    /// 处理用户对阶段完成通知的响应。
+    /// - Parameter scheduledPhaseIndex: 通知 `userInfo` 中携带的“倒计时阶段印章”——即调度该通知时正在倒计时的阶段索引。
+    ///   据此精确判断是否需要推进阶段，从根本上消除旧的 `remainingTime == totalTime` 启发式在
+    ///   reset / skip / 快捷启动后的误判（陈旧通知不会再错误地跳过一个阶段）。
+    func handleNotificationResponse(scheduledPhaseIndex: Int? = nil) async {
         // 取消所有待发送的重复通知（用户已响应）
         await notificationManager.cancelRepeatNotifications()
         logger.info("用户响应通知，已取消重复提醒")
@@ -209,16 +213,36 @@ class TimerModel: NSObject, ObservableObject {
             return
         }
 
-        // 智能判断是否需要阶段切换
-        // 如果 remainingTime == totalTime 且计时器未运行，说明阶段已自动切换，只需启动计时器
-        if remainingTime == totalTime && remainingTime > 0 {
-            logger.info("处理通知响应：阶段已切换，启动计时器")
+        // 无阶段印章（理论上仅旧版本残留通知）：回退到原启发式，保持兼容
+        guard let scheduledPhaseIndex else {
+            if remainingTime == totalTime && remainingTime > 0 {
+                logger.info("处理通知响应（无印章回退）：阶段疑似已切换，仅启动计时器")
+                playSound(.start)
+                await startTimer()
+            } else {
+                logger.info("处理通知响应（无印章回退）：进入下一阶段并启动计时器")
+                await prepareNextPhase(source: .notificationResponse, shouldSkip: false)
+                await startTimer()
+            }
+            return
+        }
+
+        let nextOfScheduled = (scheduledPhaseIndex + 1) % max(phases.count, 1)
+
+        if currentPhaseIndex == scheduledPhaseIndex {
+            // 该阶段尚未推进（例如 app 被挂起、靠预调度通知唤醒）：推进到下一阶段并启动
+            logger.info("处理通知响应：印章阶段=\(scheduledPhaseIndex) 仍为当前，推进并启动")
+            await prepareNextPhase(source: .notificationResponse, shouldSkip: false)
+            await startTimer()
+        } else if currentPhaseIndex == nextOfScheduled {
+            // 已自然完成并自动推进到下一阶段：仅启动，避免二次推进
+            logger.info("处理通知响应：已自动推进至阶段=\(self.currentPhaseIndex)，仅启动计时器")
             playSound(.start)
             await startTimer()
         } else {
-            // 需要先切换阶段再启动
-            logger.info("处理通知响应：进入下一阶段并启动计时器")
-            await prepareNextPhase(source: .notificationResponse, shouldSkip: false)
+            // 阶段已与通知不对应（reset / skip / 快捷启动后的陈旧通知）：仅启动当前阶段，绝不再推进
+            logger.warning("处理通知响应：印章阶段=\(scheduledPhaseIndex) 与当前阶段=\(self.currentPhaseIndex) 不一致，仅启动当前阶段、不推进")
+            playSound(.start)
             await startTimer()
         }
     }

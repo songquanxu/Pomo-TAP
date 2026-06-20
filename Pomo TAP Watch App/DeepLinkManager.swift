@@ -85,13 +85,12 @@ class DeepLinkManager: ObservableObject {
             return duplicate
         }
 
-        // 4. 执行操作
-        let result = await executeAction(action)
-
-        // 5. 记录执行时间（用于幂等性控制）
+        // 4. 记录执行时间（在执行前打点）：使去重窗口覆盖整个执行过程，
+        //    避免长耗时的 await 操作期间，相同动作的第二次请求绕过去重而重复执行
         lastExecutionTime[action] = Date()
 
-        return result
+        // 5. 执行操作
+        return await executeAction(action)
     }
 
     // MARK: - 私有方法
