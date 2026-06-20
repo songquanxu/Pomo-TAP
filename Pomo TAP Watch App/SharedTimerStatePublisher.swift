@@ -40,6 +40,8 @@ class SharedTimerStatePublisher: ObservableObject {
             // 按需刷新 Widget
             if needsWidgetRefresh {
                 WidgetCenter.shared.reloadAllTimelines()
+                // 同步刷新控制中心控件，使其启停状态与计时器一致
+                ControlCenter.shared.reloadControls(ofKind: ControlActionBridge.startPauseControlKind)
                 logger.info("🔄 Widget 已刷新 (智能触发)")
             } else {
                 logger.debug("⏭️  跳过 Widget 刷新 (状态无关键变化)")

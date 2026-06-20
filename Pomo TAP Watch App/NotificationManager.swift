@@ -18,6 +18,9 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         self.timerModel = timerModel
         super.init()
         UNUserNotificationCenter.current().delegate = self
+        // 关键：通知 category 不会跨启动持久化，必须在每次启动时无条件注册，
+        // 否则用户授权后的后续启动里 “立即开始下一阶段” 动作按钮会消失。
+        registerNotificationCategories()
     }
 
     // MARK: - Public Methods
@@ -28,8 +31,7 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
                     options: [.alert, .sound, .badge]
                 )
                 if granted {
-                    let category = try setupNotificationCategory()
-                    UNUserNotificationCenter.current().setNotificationCategories([category])
+                    // category 已在 init 中注册，这里仅记录授权结果
                     logger.info("通知权限已获得")
                 } else {
                     logger.warning("用户拒绝了通知权限")
@@ -171,7 +173,9 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         }
     }
 
-    private func setupNotificationCategory() throws -> UNNotificationCategory {
+    /// 注册通知 category（含 “立即开始下一阶段” 动作）。
+    /// 必须在每次启动时调用——category 不会被系统跨进程/跨启动持久化。
+    private func registerNotificationCategories() {
         let nextPhaseAction = UNNotificationAction(
             identifier: "START_NEXT_PHASE",
             title: NSLocalizedString("Start_Immediately", comment: "通知动作：立即开始下一阶段"),
@@ -186,6 +190,6 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         )
 
         UNUserNotificationCenter.current().setNotificationCategories([category])
-        return category
+        logger.info("通知 category 已注册（PHASE_COMPLETED）")
     }
 }

@@ -36,30 +36,6 @@ struct WidgetStateAdapter {
         )
     }
 
-    // MARK: - Smart Stack Model
-    func makeSmartStackState() -> SmartStackDisplayState {
-        // 提取每个阶段的时长（分钟）
-        let phaseDurations = state.phases.map { phase in
-            phase.duration / 60  // 转换秒为分钟
-        }
-
-        return SmartStackDisplayState(
-            displayMode: state.displayMode,
-            phaseType: state.currentPhaseType,
-            phaseName: state.currentPhaseName,
-            isRunning: state.timerRunning,
-            countdownRemaining: state.remainingTime,
-            flowElapsed: state.flowElapsedTime,
-            totalDuration: state.totalTime,
-            completedCycles: state.completedCycles,
-            hasSkippedInCurrentCycle: state.hasSkippedInCurrentCycle,
-            phaseStatuses: state.phaseCompletionStatus,
-            nextPhaseName: nextPhase()?.name,
-            nextPhaseDuration: nextPhase()?.duration ?? 0,
-            phaseDurations: phaseDurations
-        )
-    }
-
     // MARK: - Helpers
     private func nextPhase() -> PhaseInfo? {
         guard !state.phases.isEmpty else { return nil }
@@ -96,78 +72,10 @@ struct ComplicationDisplayState {
     }
 }
 
-// MARK: - Smart Stack Display Model
-struct SmartStackDisplayState {
-    let displayMode: PhaseDisplayMode
-    let phaseType: PhaseCategory
-    let phaseName: String
-    let isRunning: Bool
-    let countdownRemaining: Int
-    let flowElapsed: Int
-    let totalDuration: Int
-    let completedCycles: Int
-    let hasSkippedInCurrentCycle: Bool
-    let phaseStatuses: [PhaseCompletionStatus]
-    let nextPhaseName: String?
-    let nextPhaseDuration: Int
-    let phaseDurations: [Int]  // 每个阶段的时长（分钟）
-
-    var isInFlow: Bool {
-        displayMode == .flow
-    }
-}
-
 // MARK: - Safe Index Helper
 extension Array {
     subscript(safe index: Index) -> Element? {
         guard indices.contains(index) else { return nil }
         return self[index]
-    }
-}
-
-// MARK: - SmartStackDisplayState Helper Methods
-extension SmartStackDisplayState {
-    var progressValueForGauge: Double {
-        if displayMode == .flow {
-            return min(Double(flowElapsed) / Double(max(totalDuration, 1)), 1.0)
-        }
-        guard totalDuration > 0 else { return 0 }
-        return 1.0 - Double(countdownRemaining) / Double(totalDuration)
-    }
-
-    func updatedForCountdown(remaining: Int, isRunning: Bool? = nil) -> SmartStackDisplayState {
-        SmartStackDisplayState(
-            displayMode: remaining > 0 ? .countdown : .idle,
-            phaseType: phaseType,
-            phaseName: phaseName,
-            isRunning: isRunning ?? (remaining > 0),
-            countdownRemaining: remaining,
-            flowElapsed: 0,
-            totalDuration: totalDuration,
-            completedCycles: completedCycles,
-            hasSkippedInCurrentCycle: hasSkippedInCurrentCycle,
-            phaseStatuses: phaseStatuses,
-            nextPhaseName: nextPhaseName,
-            nextPhaseDuration: nextPhaseDuration,
-            phaseDurations: phaseDurations
-        )
-    }
-
-    func updatedForFlow(elapsed: Int) -> SmartStackDisplayState {
-        SmartStackDisplayState(
-            displayMode: .flow,
-            phaseType: phaseType,
-            phaseName: phaseName,
-            isRunning: true,
-            countdownRemaining: 0,
-            flowElapsed: elapsed,
-            totalDuration: totalDuration,
-            completedCycles: completedCycles,
-            hasSkippedInCurrentCycle: hasSkippedInCurrentCycle,
-            phaseStatuses: phaseStatuses,
-            nextPhaseName: nextPhaseName,
-            nextPhaseDuration: nextPhaseDuration,
-            phaseDurations: phaseDurations
-        )
     }
 }

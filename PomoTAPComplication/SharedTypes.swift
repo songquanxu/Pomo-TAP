@@ -214,3 +214,35 @@ enum PhaseCompletionStatus: String, Codable {
         }
     }
 }
+
+// MARK: - Control ↔ App 桥接（App Group）
+/// Control Center 控件的意图运行在 widget 扩展进程，无法直接驱动 app 内的计时器引擎
+/// （`DispatchSourceTimer` + `WKExtendedRuntimeSession` + 通知都在主 app 进程）。
+/// 因此控件把"待处理动作"（一个 `pomoTAP://` 深度链接）写入 App Group，并通过
+/// `openAppWhenRun` 唤起 app；app 在激活时取出并经既有的、幂等的 `DeepLinkManager` 执行。
+/// 这复用了矩形复杂功能点击切换所走的同一条成熟路径。
+enum ControlActionBridge {
+    /// Start/Pause 控件的 kind（用于 `ControlCenter.reloadControls(ofKind:)`）
+    static let startPauseControlKind = "PomoTAPStartPauseControl"
+    /// 智能叠放相关度小组件的 kind
+    static let relevanceWidgetKind = "PomoTAPSmartFocus"
+    /// App Group 中存放待处理动作的键
+    static let pendingActionKey = "PendingControlAction"
+    /// 启停计时器的深度链接（与矩形复杂功能一致）
+    static let toggleURLString = "pomoTAP://toggle"
+
+    /// 写入待处理动作（在控件意图中调用）
+    static func setPendingAction(_ urlString: String) {
+        UserDefaults(suiteName: SharedTimerState.suiteName)?.set(urlString, forKey: pendingActionKey)
+    }
+
+    /// 取出并清除待处理动作（一次性消费，在 app 激活时调用）
+    static func takePendingAction() -> String? {
+        guard let defaults = UserDefaults(suiteName: SharedTimerState.suiteName),
+              let value = defaults.string(forKey: pendingActionKey) else {
+            return nil
+        }
+        defaults.removeObject(forKey: pendingActionKey)
+        return value
+    }
+}

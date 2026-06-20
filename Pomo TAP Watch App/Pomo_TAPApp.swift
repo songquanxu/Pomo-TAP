@@ -21,6 +21,9 @@ struct Pomo_TAPApp: App {
     // 添加状态变量来控制权限提示
     @State private var showNotificationPermissionAlert = false
 
+    // 场景阶段：用于在 app 激活时消费来自控制中心控件的待处理动作
+    @Environment(\.scenePhase) private var scenePhase
+
     // 添加权限检查管理器
     private let permissionManager = PermissionManager()
 
@@ -31,9 +34,6 @@ struct Pomo_TAPApp: App {
 
         self._timerModel = StateObject(wrappedValue: timerModel)
         self._deepLinkManager = StateObject(wrappedValue: deepLinkManager)
-
-        // 建立双向连接：让TimerModel的诊断管理器能访问DeepLinkManager
-        timerModel.setDeepLinkManager(deepLinkManager)
     }
 
     var body: some Scene {
@@ -47,6 +47,12 @@ struct Pomo_TAPApp: App {
                         await handleDeepLinkResult(result)
                     }
                 }
+                .onChange(of: scenePhase) { _, newPhase in
+                    // 控件通过 openAppWhenRun 唤起 app（不携带 URL），在激活时取出待处理动作
+                    if newPhase == .active {
+                        drainPendingControlAction()
+                    }
+                }
                 .alert(NSLocalizedString("需要通知权限", comment: ""), isPresented: $showNotificationPermissionAlert) {
                     Button(NSLocalizedString("去设置", comment: ""), role: .none) {
                         openSettings()
@@ -56,6 +62,9 @@ struct Pomo_TAPApp: App {
                     Text(NSLocalizedString("NotificationPermissionDescription", comment: ""))
                 }
                 .task {
+                    // 冷启动（由控件唤起）时也消费一次待处理动作
+                    drainPendingControlAction()
+
                     // 在视图加载后检查权限
                     let status = await permissionManager.checkNotificationPermission()
                     switch status {
@@ -68,6 +77,20 @@ struct Pomo_TAPApp: App {
                         break
                     }
                 }
+        }
+    }
+
+    // MARK: - 控制中心控件动作消费
+    /// 取出控件写入 App Group 的待处理深度链接，经既有幂等的 `DeepLinkManager` 执行。
+    @MainActor
+    private func drainPendingControlAction() {
+        guard let urlString = ControlActionBridge.takePendingAction(),
+              let url = URL(string: urlString) else {
+            return
+        }
+        Task {
+            let result = await deepLinkManager.handleDeepLink(url)
+            await handleDeepLinkResult(result)
         }
     }
 
@@ -93,7 +116,7 @@ struct Pomo_TAPApp: App {
     // 打开系统设置
     private func openSettings() {
         if let settingsUrl = URL(string: "x-apple-watch://") {
-            WKExtension.shared().openSystemURL(settingsUrl)
+            WKApplication.shared().openSystemURL(settingsUrl)
         }
     }
 }

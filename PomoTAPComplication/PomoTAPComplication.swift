@@ -7,7 +7,6 @@
 
 import WidgetKit
 import SwiftUI
-import AppIntents
 import os
 
 #if os(watchOS)
@@ -177,9 +176,28 @@ struct Provider: TimelineProvider {
 
         let adapter = WidgetStateAdapter(state: state)
         let displayState = adapter.makeComplicationState()
-        let relevance = calculateRelevance(for: displayState, at: state.lastUpdateTime)
 
-        return ComplicationEntry(date: state.lastUpdateTime, state: displayState, relevance: relevance)
+        // 以真实的"现在"为锚点，从持久化的日期重新计算实时剩余/已过时间，
+        // 避免使用 app 上次写入状态时（lastUpdateTime）的陈旧快照。
+        let now = Date()
+        let correctedState: ComplicationDisplayState
+        if state.displayMode == .countdown,
+           state.timerRunning,
+           let endDate = state.phaseEndDate {
+            let liveRemaining = max(0, Int(endDate.timeIntervalSince(now).rounded(.up)))
+            correctedState = displayState.updatedForCountdown(remaining: liveRemaining)
+        } else if state.displayMode == .flow,
+                  let startDate = state.flowStartDate {
+            let liveElapsed = max(0, Int(now.timeIntervalSince(startDate)))
+            correctedState = displayState.updatedForFlow(elapsed: liveElapsed)
+        } else {
+            // 暂停/空闲：保持适配器构建的状态
+            correctedState = displayState
+        }
+
+        let relevance = calculateRelevance(for: correctedState, at: now)
+
+        return ComplicationEntry(date: now, state: correctedState, relevance: relevance)
     }
 
     // MARK: - 时间间隔生成
@@ -225,7 +243,6 @@ struct Provider: TimelineProvider {
 enum ComplicationError: Error {
     case userDefaultsNotAccessible
     case noDataAvailable
-    case decodingFailed(Error)
 }
 
 // MARK: - 视图
@@ -275,21 +292,18 @@ struct RectangularComplicationView: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 8) {
-            // 左侧：Gauge + Button（交互）
-            Button(intent: ToggleTimerIntent()) {
-                Gauge(value: gaugeProgress, in: 0...1) {
-                } currentValueLabel: {
-                    Image(systemName: buttonIcon)
-                        .font(.system(size: 16, weight: .semibold))
-                        .foregroundStyle(iconColor)
-                }
-                .gaugeStyle(.accessoryCircularCapacity)
-                .tint(ringColor)
+            // 左侧：Gauge（点击整个 complication 通过 widgetURL 切换计时器）
+            Gauge(value: gaugeProgress, in: 0...1) {
+            } currentValueLabel: {
+                Image(systemName: buttonIcon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(iconColor)
             }
-            .buttonStyle(.plain)
+            .gaugeStyle(.accessoryCircularCapacity)
+            .tint(ringColor)
             .frame(width: 42, height: 42)
 
-            // 右侧：信息区域（通过 widgetURL 打开 app）
+            // 右侧：信息区域
             VStack(alignment: .leading, spacing: 3) {
                 // 第一行：软件名 + 成就
                 HStack {
@@ -318,7 +332,7 @@ struct RectangularComplicationView: View {
         .padding(.vertical, 2)
         .padding(.horizontal, 4)
         .containerBackground(.clear, for: .widget)
-        .widgetURL(URL(string: "pomoTAP://open")!)
+        .widgetURL(URL(string: "pomoTAP://toggle")!)
     }
 
     // MARK: - 左侧 Gauge 相关
@@ -462,10 +476,25 @@ struct InlineComplicationView: View {
     var entry: ComplicationEntry
 
     var body: some View {
-        Text(inlineText(for: entry.state))
+        content
             .font(.system(size: 15, weight: .medium, design: .rounded))
             .containerBackground(.clear, for: .widget)
             .widgetURL(URL(string: "pomoTAP://open")!)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        let state = entry.state
+        if state.displayMode == .countdown, state.isRunning, let endDate = state.phaseEndDate {
+            // 倒计时运行中：系统驱动的实时计时文本（自动逐秒倒数）
+            Text("\(phaseEmoji(for: state)) \(endDate, style: .timer)")
+        } else if state.displayMode == .flow, let startDate = state.flowStartDate {
+            // 心流模式：从开始时间起实时正数
+            Text("☄︎ \(startDate, style: .timer)")
+        } else {
+            // 暂停/空闲或缺少日期：使用静态文本
+            Text(inlineText(for: state))
+        }
     }
 }
 
@@ -481,10 +510,33 @@ struct CornerComplicationView: View {
                 .widgetAccentable()
         }
         .widgetLabel {
-            ProgressView(value: entry.state.progressValueForGauge, total: 1.0)
+            progressLabel
                 .tint(entry.state.isRunning ? .orange : .white.opacity(0.4))
         }
         .widgetURL(URL(string: "pomoTAP://open")!)
+    }
+
+    @ViewBuilder
+    private var progressLabel: some View {
+        let state = entry.state
+        // 倒计时运行中：用系统日期驱动的进度条，让弧线随时间实时填充（0→1）
+        if state.displayMode == .countdown, state.isRunning, let endDate = state.phaseEndDate,
+           let interval = liveInterval(end: endDate) {
+            ProgressView(timerInterval: interval, countsDown: false) {
+                EmptyView()
+            } currentValueLabel: {
+                EmptyView()
+            }
+        } else {
+            ProgressView(value: state.progressValueForGauge, total: 1.0)
+        }
+    }
+
+    /// 计算进度条的实时区间：起点优先用已锚定的 entry.date，否则用当前时间；保证 start < end。
+    private func liveInterval(end: Date) -> ClosedRange<Date>? {
+        let start = entry.date < end ? entry.date : Date()
+        guard start < end else { return nil }
+        return start...end
     }
 }
 
@@ -547,19 +599,6 @@ private func phaseEmoji(for state: ComplicationDisplayState) -> String {
     }
 }
 
-private func primaryTimeText(for state: ComplicationDisplayState) -> String {
-    switch state.displayMode {
-    case .flow:
-        return String(format: NSLocalizedString("Flow_Time_Format", comment: ""), timeString(from: state.flowElapsed))
-    case .countdown:
-        return timeString(from: state.countdownRemaining)
-    case .paused:
-        return NSLocalizedString("Paused", comment: "")
-    case .idle:
-        return NSLocalizedString("Ready", comment: "")
-    }
-}
-
 private func timeString(from seconds: Int) -> String {
     let minutes = seconds / 60
     if minutes >= 60 {
@@ -570,7 +609,7 @@ private func timeString(from seconds: Int) -> String {
     return "\(minutes)m"
 }
 
-private extension ComplicationDisplayState {
+extension ComplicationDisplayState {
     var progressValueForGauge: Double {
         if isInFlow {
             return min(Double(flowElapsed) / Double(max(totalDuration, 1)), 1.0)
@@ -651,7 +690,7 @@ struct PomoTAPComplication: Widget {
             PomoTAPComplicationView(entry: entry)
         }
         .configurationDisplayName(NSLocalizedString("Focus", comment: ""))
-        .description("Pomodoro timer")
+        .description(NSLocalizedString("Widget_Focus_Desc", comment: "Primary complication description"))
         .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline, .accessoryCorner])
         .containerBackgroundRemovable(true)
     }
@@ -666,6 +705,10 @@ struct PomoTAPWidgetBundle: WidgetBundle {
         QuickStartBreakWidget()
         StatsWidget()
         NextPhaseWidget()
+        // watchOS 26：智能叠放相关度卡片（阶段临近结束时自动浮现）
+        SmartFocusWidget()
+        // watchOS 26：控制中心 / 操作按钮的启停控件
+        StartPauseControlWidget()
     }
 }
 

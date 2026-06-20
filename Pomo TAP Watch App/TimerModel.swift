@@ -14,7 +14,6 @@ class TimerModel: NSObject, ObservableObject {
     let sessionManager: BackgroundSessionManager  // Made public for debugging
     private let notificationManager: NotificationManager
     let sharedStatePublisher: SharedTimerStatePublisher  // 集中状态管理器（公开访问）
-    private let diagnosticsManager: DiagnosticsManager  // 诊断管理器（新增）
 
     // MARK: - Published Properties (代理到各个管理器)
     @Published var phases: [Phase] = []
@@ -47,6 +46,7 @@ class TimerModel: NSObject, ObservableObject {
     // MARK: - Constants
     private let repeatNotificationsKey = "enableRepeatNotifications"  // UserDefaults 键
     private let finalCountdownHapticsKey = "enableFinalCountdownHaptics"  // UserDefaults 键
+    private let infiniteModeKey = "isInfiniteMode"  // 心流模式开关的持久化键
 
     // MARK: - Phase Transition Source
     private enum PhaseTransitionSource: String, CaseIterable {
@@ -66,7 +66,6 @@ class TimerModel: NSObject, ObservableObject {
         self.sessionManager = BackgroundSessionManager()
         self.notificationManager = NotificationManager(timerModel: nil)
         self.sharedStatePublisher = SharedTimerStatePublisher()  // 初始化状态发布器
-        self.diagnosticsManager = DiagnosticsManager()  // 初始化诊断管理器
 
         super.init()
 
@@ -80,11 +79,13 @@ class TimerModel: NSObject, ObservableObject {
             self.enableFinalCountdownHaptics = savedValue
         }
 
+        // 从 UserDefaults 加载心流模式开关（修复：此前从未持久化，每次启动都被重置为关闭）
+        if let savedValue = UserDefaults.standard.object(forKey: infiniteModeKey) as? Bool {
+            self.isInfiniteMode = savedValue
+        }
+
         // 设置代理
         self.notificationManager.timerModel = self
-
-        // 设置诊断管理器依赖
-        self.diagnosticsManager.setTimerModel(self)
 
         // 绑定状态
         setupBindings()
@@ -277,7 +278,9 @@ class TimerModel: NSObject, ObservableObject {
         stateManager.currentPhaseIndex = phaseIndex
         stateManager.resetPhaseCompletionStatus()  // 重置所有阶段状态
         stateManager.phaseCompletionStatus[phaseIndex] = .current  // 标记目标阶段为当前
-        currentPhaseName = phases[phaseIndex].name
+        // 修复：更新 stateManager 的阶段名（而非仅 self），否则 saveState() 会持久化与新索引不一致的旧阶段名。
+        // self.currentPhaseName 会通过 Combine 绑定自动同步。
+        stateManager.currentPhaseName = phases[phaseIndex].name
         stateManager.saveState()
 
         // 更新 UI 状态
@@ -392,9 +395,11 @@ class TimerModel: NSObject, ObservableObject {
         timerCore.$infiniteElapsedTime.assign(to: &$infiniteElapsedTime)
         timerCore.$isInFlowCountUp.assign(to: &$isInFlowCountUp)
 
-        // 双向绑定无限模式
+        // 绑定心流模式开关：同步到计时器核心，并持久化到 UserDefaults
         $isInfiniteMode.sink { [weak self] newValue in
-            self?.timerCore.isInfiniteMode = newValue
+            guard let self = self else { return }
+            self.timerCore.isInfiniteMode = newValue
+            UserDefaults.standard.set(newValue, forKey: self.infiniteModeKey)
         }.store(in: &cancellables)
 
         // 绑定最后 5 秒震动开关到计时器核心
@@ -558,36 +563,5 @@ class TimerModel: NSObject, ObservableObject {
     // MARK: - 兼容性属性和方法
     var currentPhase: Phase {
         return phases[currentPhaseIndex]
-    }
-
-    // MARK: - 诊断接口方法（新增）
-    /// 获取完整系统诊断报告
-    func getSystemDiagnosticReport() -> String {
-        return diagnosticsManager.getFullDiagnosticReport()
-    }
-
-    /// 获取简化健康状态摘要
-    func getSystemHealthSummary() -> String {
-        return diagnosticsManager.getHealthSummary()
-    }
-
-    /// 手动触发系统健康检查
-    func triggerSystemHealthCheck() {
-        diagnosticsManager.triggerHealthCheck()
-    }
-
-    /// 清除诊断历史
-    func clearDiagnosticHistory() {
-        diagnosticsManager.clearDiagnosticHistory()
-    }
-
-    /// 获取当前系统健康状态
-    var systemHealthStatus: SystemHealthStatus {
-        return diagnosticsManager.overallHealthStatus
-    }
-
-    /// 设置深度链接管理器引用（供App调用）
-    func setDeepLinkManager(_ deepLinkManager: DeepLinkManager) {
-        diagnosticsManager.setDeepLinkManager(deepLinkManager)
     }
 }

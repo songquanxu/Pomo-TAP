@@ -11,22 +11,25 @@ private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "NextPh
 
 struct NextPhaseEntry: TimelineEntry {
     let date: Date
-    let state: SmartStackDisplayState
+    let state: ComplicationDisplayState
 
     static var placeholder: NextPhaseEntry {
-        let sampleState = SmartStackDisplayState(
+        let sampleState = ComplicationDisplayState(
             displayMode: .countdown,
             phaseType: .work,
-            phaseName: "Work",
             isRunning: true,
             countdownRemaining: 25 * 60,
             flowElapsed: 0,
             totalDuration: 25 * 60,
+            progress: 0,
+            phaseEndDate: Date().addingTimeInterval(25 * 60),
+            flowStartDate: nil,
+            currentPhaseName: "Work",
+            nextPhaseName: "Short Break",
+            nextPhaseDuration: 5 * 60,
             completedCycles: 2,
             hasSkippedInCurrentCycle: false,
             phaseStatuses: [.current, .notStarted, .notStarted, .notStarted],
-            nextPhaseName: "Short Break",
-            nextPhaseDuration: 5 * 60,
             phaseDurations: [25, 5, 25, 15]
         )
         return NextPhaseEntry(date: Date(), state: sampleState)
@@ -73,11 +76,24 @@ struct NextPhaseProvider: TimelineProvider {
 
         let state = try JSONDecoder().decode(SharedTimerState.self, from: data)
         let adapter = WidgetStateAdapter(state: state)
-        let displayState = adapter.makeSmartStackState()
+        let displayState = adapter.makeComplicationState()
 
-        logger.info("✅ NextPhase加载: next=\(displayState.nextPhaseName ?? "nil"), mode=\(displayState.displayMode.rawValue)")
+        // 以真实的"现在"为锚点，从持久化日期重算实时剩余/已过时间，避免使用陈旧的 lastUpdateTime 快照。
+        let now = Date()
+        let correctedState: ComplicationDisplayState
+        if state.displayMode == .countdown, state.timerRunning, let endDate = state.phaseEndDate {
+            let liveRemaining = max(0, Int(endDate.timeIntervalSince(now).rounded(.up)))
+            correctedState = displayState.updatedForCountdown(remaining: liveRemaining)
+        } else if state.displayMode == .flow, let startDate = state.flowStartDate {
+            let liveElapsed = max(0, Int(now.timeIntervalSince(startDate)))
+            correctedState = displayState.updatedForFlow(elapsed: liveElapsed)
+        } else {
+            correctedState = displayState
+        }
 
-        return NextPhaseEntry(date: state.lastUpdateTime, state: displayState)
+        logger.info("✅ NextPhase加载: next=\(correctedState.nextPhaseName ?? "nil"), mode=\(correctedState.displayMode.rawValue)")
+
+        return NextPhaseEntry(date: now, state: correctedState)
     }
 
     private func timeline(from entry: NextPhaseEntry) -> [NextPhaseEntry] {
@@ -116,7 +132,7 @@ struct NextPhaseWidgetView: View {
             .widgetURL(URL(string: "pomoTAP://open")!)
     }
 
-    private func displayText(for state: SmartStackDisplayState) -> String {
+    private func displayText(for state: ComplicationDisplayState) -> String {
         let nextName = state.nextPhaseName ?? NSLocalizedString("Unknown", comment: "")
         switch state.displayMode {
         case .flow:

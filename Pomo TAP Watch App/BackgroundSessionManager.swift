@@ -240,22 +240,6 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
         sessionStartTime = nil
     }
 
-    // MARK: - 智能诊断方法（新增）
-    func getSessionDiagnostics() -> String {
-        let metrics = sessionMetrics
-        return """
-        📊 会话诊断报告:
-        • 总启动次数: \(metrics.totalSessionsStarted)
-        • 失败次数: \(metrics.totalSessionsFailed)
-        • 成功率: \(String(format: "%.1f", metrics.successRate * 100))%
-        • 平均持续时间: \(Int(metrics.averageSessionDuration))秒
-        • 上次持续时间: \(Int(metrics.lastSessionDuration))秒
-        • 当前状态: \(sessionState.description)
-        • 引用计数: \(sessionRetainCount)
-        • 挂起请求: \(pendingRetainRequests)
-        """
-    }
-
     // MARK: - WKExtendedRuntimeSessionDelegate - 智能回调处理
     nonisolated func extendedRuntimeSessionDidStart(_ extendedRuntimeSession: WKExtendedRuntimeSession) {
         Task { @MainActor in

@@ -201,14 +201,25 @@ class TimerCore: NSObject, ObservableObject {
 
     func syncTimerStateFromSystemTime() {
         // 从系统时间同步计时器状态 (用于 AOD 恢复时修正显示偏差)
-        guard timerRunning, !isInFlowCountUp, let endTime = endTime else { return }
+        // AOD 期间 UI 值按整分钟节流更新，离开 AOD 时必须立即用墙钟时间校正。
+        guard timerRunning else { return }
 
         let now = Date()
-        let newRemainingTime = max(Int(ceil(endTime.timeIntervalSince(now))), 0)
 
-        if newRemainingTime != remainingTime {
-            logger.info("🔄 AOD 恢复同步: \(self.remainingTime) → \(newRemainingTime) 秒")
-            remainingTime = newRemainingTime
+        if isInFlowCountUp {
+            guard let startTime = startTime else { return }
+            let newElapsed = max(Int(now.timeIntervalSince(startTime)), 0)
+            if newElapsed != infiniteElapsedTime {
+                logger.info("🔄 AOD 恢复同步(心流): \(self.infiniteElapsedTime) → \(newElapsed) 秒")
+                infiniteElapsedTime = newElapsed
+            }
+        } else {
+            guard let endTime = endTime else { return }
+            let newRemainingTime = max(Int(ceil(endTime.timeIntervalSince(now))), 0)
+            if newRemainingTime != remainingTime {
+                logger.info("🔄 AOD 恢复同步: \(self.remainingTime) → \(newRemainingTime) 秒")
+                remainingTime = newRemainingTime
+            }
         }
     }
 
@@ -218,25 +229,19 @@ class TimerCore: NSObject, ObservableObject {
 
         let now = Date()
 
-        // CRITICAL FIX: Always update internal state first, before any AOD throttling
-        // AOD throttling should ONLY affect UI update frequency, NOT timer logic
-        // This fixes the bug where early return prevented state updates and phase completion
+        // 核心原则：完成检测与最后 5 秒震动【始终每秒】运行，绝不被 AOD 节流跳过；
+        // AOD 节流只跳过 @Published 值的赋值（即只降低 UI 刷新频率），避免误以为“节流”却仍每秒重绘。
 
         if isInFlowCountUp {
             // 心流正计时：基于系统时间计算已过时间
             guard let startTime = startTime else { return }
-            let elapsed = Int(now.timeIntervalSince(startTime))
+            let elapsed = max(Int(now.timeIntervalSince(startTime)), 0)
 
-            // 始终更新内部状态（即使在 AOD 模式下也必须更新）
-            if elapsed != infiniteElapsedTime {
+            // AOD 下 >0 秒时仅在整分钟边界更新 UI（显示为 mm:--，本就每分钟才变化一次）
+            let aodThrottled = (updateFrequency == .aod && elapsed % 60 != 0)
+            if !aodThrottled && elapsed != infiniteElapsedTime {
                 infiniteElapsedTime = elapsed
                 logger.debug("心流正计时已过时间: \(elapsed) 秒")
-            }
-
-            // AOD 节流：仅影响 UI 更新频率，不影响状态计算
-            // 在 AOD 下，只在整分钟时继续执行（触发 UI 更新），其他时候提前返回
-            if updateFrequency == .aod {
-                if infiniteElapsedTime % 60 != 0 { return }
             }
 
         } else {
@@ -244,44 +249,34 @@ class TimerCore: NSObject, ObservableObject {
             guard let endTime = endTime else { return }
             let newRemainingTime = max(Int(ceil(endTime.timeIntervalSince(now))), 0)
 
-            // 始终更新内部状态（即使在 AOD 模式下也必须更新）
-            if newRemainingTime != self.remainingTime {
-                let previousTime = self.remainingTime
-                self.remainingTime = newRemainingTime
-
-                if enableFinalCountdownHaptics,
-                   (1...5).contains(newRemainingTime),
-                   lastCountdownHapticSecond != newRemainingTime {
-                    lastCountdownHapticSecond = newRemainingTime
-                    WKInterfaceDevice.current().play(.click)
-                    logger.debug("最后 5 秒震动提醒: \(newRemainingTime)")
-                }
-
-                // 如果时间到达零，停止计时器并触发异步回调
-                if newRemainingTime == 0 {
-                    stopTimer()
-                    lastCountdownHapticSecond = nil
-                    logger.info("计时器自然结束")
-
-                    // 使用 Task 确保异步回调在主线程安全执行
-                    if let onPhaseCompleted = onPhaseCompleted {
-                        Task { @MainActor in
-                            await onPhaseCompleted()
-                        }
+            // 1) 完成检测：每秒进行，不受节流影响
+            if newRemainingTime == 0 {
+                if self.remainingTime != 0 { self.remainingTime = 0 }
+                stopTimer()
+                lastCountdownHapticSecond = nil
+                logger.info("计时器自然结束")
+                if let onPhaseCompleted = onPhaseCompleted {
+                    Task { @MainActor in
+                        await onPhaseCompleted()
                     }
-                    return  // 阶段完成，直接返回
-                } else if abs(previousTime - newRemainingTime) > 1 {
-                    // 如果时间跳跃较大，记录日志（可能发生了系统休眠等情况）
-                    logger.debug("时间更新: \(previousTime) -> \(newRemainingTime)")
                 }
+                return  // 阶段完成，直接返回
             }
 
-            // AOD 节流：仅影响 UI 更新频率，不影响状态计算
-            // 在 AOD 下：
-            // - 剩余时间 > 60 秒：只在整分钟时继续执行（节电 96%）
-            // - 剩余时间 ≤ 60 秒：每秒都继续执行（确保最后 1 分钟准确显示）
-            if updateFrequency == .aod {
-                if remainingTime > 60 && remainingTime % 60 != 0 { return }
+            // 2) 最后 5 秒震动：每秒检查（≤5s 永远不会被 AOD 节流，故始终触发）
+            if enableFinalCountdownHaptics,
+               (1...5).contains(newRemainingTime),
+               lastCountdownHapticSecond != newRemainingTime {
+                lastCountdownHapticSecond = newRemainingTime
+                WKInterfaceDevice.current().play(.click)
+                logger.debug("最后 5 秒震动提醒: \(newRemainingTime)")
+            }
+
+            // 3) AOD 节流：剩余 > 60 秒时仅在整分钟边界更新 UI（节电约 96% 的 @Published 刷新）；
+            //    ≤ 60 秒时每秒更新（保证最后一分钟逐秒准确）。离开 AOD 由 syncTimerStateFromSystemTime 校正。
+            let aodThrottled = (updateFrequency == .aod && newRemainingTime > 60 && newRemainingTime % 60 != 0)
+            if !aodThrottled && newRemainingTime != self.remainingTime {
+                self.remainingTime = newRemainingTime
             }
         }
 

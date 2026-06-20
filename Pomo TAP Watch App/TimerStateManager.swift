@@ -58,7 +58,8 @@ class TimerStateManager: ObservableObject {
     func loadState() {
         if let data = userDefaults.data(forKey: "timerState"),
            let state = try? JSONDecoder().decode(TimerState.self, from: data) {
-            currentPhaseIndex = state.currentPhaseIndex
+            // 防御：持久化的索引可能越界（数据损坏 / 旧版本阶段数不同），夹紧到有效范围避免后续下标崩溃
+            currentPhaseIndex = phases.indices.contains(state.currentPhaseIndex) ? state.currentPhaseIndex : 0
             completedCycles = state.completedCycles
             currentPhaseName = state.currentPhaseName
 
