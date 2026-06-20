@@ -80,7 +80,7 @@ struct ContentView: View {
                             .padding(.top, 12)
                     }
                 }
-                .navigationBarHidden(true)
+                .toolbar(.hidden, for: .navigationBar)
                 // AOD 模式下隐藏底部按钮
                 .toolbar {
                     if !isLuminanceReduced {
@@ -154,7 +154,7 @@ struct ContentView: View {
                 .buttonStyle(.bordered)
                 .handGestureShortcut(.primaryAction)  // 设置为双指互点的默认按钮
             }
-            .edgesIgnoringSafeArea(.all)
+            .ignoresSafeArea()
         }
     }
 
@@ -182,7 +182,7 @@ struct ContentView: View {
                 .font(.system(size: 14, weight: .semibold, design: .rounded))
             Text(weekdayString().prefix(3)) // 只显示周几的缩写，如 "周一"
                 .font(.system(size: 12, weight: .regular, design: .rounded))
-                .foregroundColor(.secondary)
+                .foregroundStyle(.secondary)
         }
     }
 
@@ -195,7 +195,7 @@ struct ContentView: View {
             // ∞ 符号，与星期对齐
             Text(NSLocalizedString("∞", comment: "Flow mode infinite symbol"))
                 .font(.system(size: 18, weight: .light, design: .rounded))
-                .foregroundColor(timerModel.isInfiniteMode ? .yellow : .gray)
+                .foregroundStyle(timerModel.isInfiniteMode ? .yellow : .gray)
         }
     }
 
@@ -271,7 +271,7 @@ struct ContentView: View {
         } else {
             // 普通模式：橙色；AOD 状态下降低亮度
             let ringColor = isLuminanceReduced ? Color.orange.opacity(0.5) : Color.orange
-            return AnyView(ring.foregroundColor(ringColor))
+            return AnyView(ring.foregroundStyle(ringColor))
         }
     }
 
@@ -281,7 +281,7 @@ struct ContentView: View {
             if !isLuminanceReduced {
                 HStack() {
                     Image(systemName: "medal.fill")
-                        .foregroundColor(timerModel.hasSkippedInCurrentCycle ? .green : .orange)
+                        .foregroundStyle(timerModel.hasSkippedInCurrentCycle ? .green : .orange)
                     Text(
                         String(
                             format: NSLocalizedString("×%lld", comment: "Completed cycle count format"),
@@ -289,7 +289,7 @@ struct ContentView: View {
                         )
                     )
                         .font(.system(size: 14))
-                        .foregroundColor(timerModel.hasSkippedInCurrentCycle ? .green : .orange)
+                        .foregroundStyle(timerModel.hasSkippedInCurrentCycle ? .green : .orange)
                 }
             }
 
@@ -302,7 +302,7 @@ struct ContentView: View {
 
             Text(timeText)
                 .font(.system(size: 32, weight: .bold, design: .rounded))
-                .foregroundColor(timerModel.isInFlowCountUp ? .yellow : .primary)
+                .foregroundStyle(timerModel.isInFlowCountUp ? .yellow : .primary)
                 .opacity(isLuminanceReduced ? 0.5 : 1.0)  // AOD 模式下降低亮度
                 .allowsHitTesting(false)
 
@@ -384,7 +384,7 @@ struct PhaseIndicator: View {
     var body: some View {
         Text(displayText)
             .font(.caption)
-            .foregroundColor(color)
+            .foregroundStyle(color)
     }
 
     // 计算要显示的文本
@@ -431,19 +431,7 @@ struct PhaseIndicator: View {
     }
 }
 
-struct ContentView_Previews: PreviewProvider {
-    static var previews: some View {
-        ContentView()
-            .environmentObject(TimerModel())
-    }
-}
-
-extension View {
-    @ViewBuilder func `if`<Content: View>(_ condition: Bool, transform: (Self) -> Content) -> some View {
-        if condition {
-            transform(self)
-        } else {
-            self
-        }
-    }
+#Preview {
+    ContentView()
+        .environmentObject(TimerModel())
 }

@@ -33,7 +33,6 @@ class SharedTimerStatePublisher: ObservableObject {
         if let userDefaults = UserDefaults(suiteName: suiteName),
            let data = try? JSONEncoder().encode(newState) {
             userDefaults.set(data, forKey: userDefaultsKey)
-            userDefaults.synchronize()
 
             logger.info("✅ 状态已更新: phase=\(newState.currentPhaseName), running=\(newState.timerRunning), remaining=\(newState.remainingTime)s")
 
@@ -53,12 +52,6 @@ class SharedTimerStatePublisher: ObservableObject {
         } else {
             logger.error("❌ 状态更新失败: UserDefaults 或编码失败")
         }
-    }
-
-    /// 强制刷新 Widget (用于特殊场景)
-    func forceRefreshWidgets() {
-        WidgetCenter.shared.reloadAllTimelines()
-        logger.info("🔄 Widget 强制刷新")
     }
 
     // MARK: - Private Methods
@@ -175,41 +168,4 @@ class SharedTimerStatePublisher: ObservableObject {
 
         return shouldRefresh
     }
-}
-
-// MARK: - Widget 刷新策略扩展
-extension SharedTimerStatePublisher {
-
-    /// 针对特定 Widget 的刷新策略
-    /// 未来可扩展为按需刷新特定 Widget 而非全量刷新
-    func refreshSpecificWidgets(for changeType: WidgetChangeType) {
-        switch changeType {
-        case .phaseTransition:
-            // 阶段切换影响所有 Widget
-            WidgetCenter.shared.reloadAllTimelines()
-            logger.info("🔄 阶段切换 - 全量刷新 Widget")
-
-        case .timerStateChange:
-            // 计时器状态变化影响主要 Widget
-            WidgetCenter.shared.reloadAllTimelines()
-            logger.info("🔄 计时器状态变化 - 刷新计时器 Widget")
-
-        case .cycleCompletion:
-            // 周期完成影响统计 Widget
-            WidgetCenter.shared.reloadAllTimelines()
-            logger.info("🔄 周期完成 - 刷新统计 Widget")
-
-        case .timeUpdate:
-            // 时间更新通常不需要刷新 (由 Widget 内部 timeline 处理)
-            logger.debug("⏭️  时间更新 - 跳过刷新")
-        }
-    }
-}
-
-/// Widget 变化类型枚举
-enum WidgetChangeType {
-    case phaseTransition      // 阶段切换
-    case timerStateChange     // 计时器状态变化
-    case cycleCompletion      // 周期完成
-    case timeUpdate           // 时间更新
 }

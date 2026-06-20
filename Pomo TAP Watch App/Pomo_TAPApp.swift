@@ -128,11 +128,3 @@ private actor PermissionManager {
         return settings.authorizationStatus
     }
 }
-
-// MARK: - Preview Provider
-struct Pomo_TAPApp_Previews: PreviewProvider {
-    static var previews: some View {
-        ContentView()
-            .environmentObject(TimerModel())
-    }
-}

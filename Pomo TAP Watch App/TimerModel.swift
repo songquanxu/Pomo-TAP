@@ -108,12 +108,11 @@ class TimerModel: NSObject, ObservableObject {
             timerCore.stopTimer()
             sessionManager.stopExtendedSession()
             cancelPendingNotifications()  // 暂停时取消通知
+            // 暂停路径需要发布一次状态；启动路径已由 startTimer() 内部发布
+            await sharedStatePublisher.updateSharedState(from: self)
         } else {
             playSound(.start)
             await startTimer()
-        }
-        Task {
-            await sharedStatePublisher.updateSharedState(from: self)
         }
     }
 
@@ -199,17 +198,6 @@ class TimerModel: NSObject, ObservableObject {
         logger.info("用户跳过当前阶段并自动开始下一阶段")
     }
 
-    // 注意：moveToNextPhase 方法已被 prepareNextPhase 替代，保留用于向后兼容
-    func moveToNextPhase(autoStart: Bool, skip: Bool = false) async {
-        // 使用新的统一阶段准备函数
-        await prepareNextPhase(source: skip ? .userSkip : .timerCompletion, shouldSkip: skip)
-
-        // 如果需要自动开始，启动计时器
-        if autoStart {
-            await startTimer()
-        }
-    }
-
     func handleNotificationResponse() async {
         // 取消所有待发送的重复通知（用户已响应）
         await notificationManager.cancelRepeatNotifications()
@@ -285,11 +273,8 @@ class TimerModel: NSObject, ObservableObject {
 
         // 更新 UI 状态
         updateUIState()
-        Task {
-            await sharedStatePublisher.updateSharedState(from: self)
-        }
 
-        // 立即启动计时器
+        // 立即启动计时器（startTimer 内部会发布包含新阶段与运行态的共享状态，无需在此重复发布）
         playSound(.start)
         await startTimer()
 
@@ -412,9 +397,7 @@ class TimerModel: NSObject, ObservableObject {
             guard let self = self else { return }
             // 如果关闭心流模式，且当前处于心流正计时状态
             if !isEnabled && self.isInFlowCountUp && self.timerRunning {
-                Task { @MainActor [weak self] in
-                    await self?.stopFlowCountUp()
-                }
+                Task { await self.stopFlowCountUp() }
             }
         }.store(in: &cancellables)
 
@@ -504,8 +487,8 @@ class TimerModel: NSObject, ObservableObject {
             // 安排通知 - 使用剩余时间（秒）
             notificationManager.sendNotification(
                 for: .phaseCompleted,
-                currentPhaseDuration: remainingTime,  // ✅ 修正：传递秒数，不除以60
-                nextPhaseDuration: phases[(currentPhaseIndex + 1) % phases.count].duration / 60
+                currentPhaseDurationSeconds: remainingTime,
+                nextPhaseDurationMinutes: phases[(currentPhaseIndex + 1) % phases.count].duration / 60
             )
         }
 
@@ -558,10 +541,5 @@ class TimerModel: NSObject, ObservableObject {
         UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
         UNUserNotificationCenter.current().removeAllDeliveredNotifications()
         logger.info("已取消所有待发送和已送达的通知")
-    }
-
-    // MARK: - 兼容性属性和方法
-    var currentPhase: Phase {
-        return phases[currentPhaseIndex]
     }
 }

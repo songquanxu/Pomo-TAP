@@ -15,7 +15,7 @@ struct SettingsView: View {
                 Toggle(isOn: $timerModel.isInfiniteMode) {
                     HStack {
                         Image(systemName: "infinity")
-                            .foregroundColor(.yellow)
+                            .foregroundStyle(.yellow)
                         Text(NSLocalizedString("Flow_Mode", comment: ""))
                     }
                 }
@@ -24,12 +24,12 @@ struct SettingsView: View {
                 Toggle(isOn: $timerModel.enableRepeatNotifications) {
                     HStack {
                         Image(systemName: "bell.badge")
-                            .foregroundColor(.orange)
+                            .foregroundStyle(.orange)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(NSLocalizedString("Repeat_Notifications", comment: ""))
                             Text(NSLocalizedString("Repeat_Notifications_Desc", comment: ""))
                                 .font(.system(size: 11))
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -37,12 +37,12 @@ struct SettingsView: View {
                 Toggle(isOn: $timerModel.enableFinalCountdownHaptics) {
                     HStack {
                         Image(systemName: "waveform.badge.magnifyingglass")
-                            .foregroundColor(.cyan)
+                            .foregroundStyle(.cyan)
                         VStack(alignment: .leading, spacing: 2) {
                             Text(NSLocalizedString("Final_Countdown_Haptics", comment: ""))
                             Text(NSLocalizedString("Final_Countdown_Haptics_Desc", comment: ""))
                                 .font(.system(size: 11))
-                                .foregroundColor(.secondary)
+                                .foregroundStyle(.secondary)
                         }
                     }
                 }

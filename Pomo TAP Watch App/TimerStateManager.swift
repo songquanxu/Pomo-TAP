@@ -48,7 +48,6 @@ class TimerStateManager: ObservableObject {
             let encoder = JSONEncoder()
             let data = try encoder.encode(state)
             userDefaults.set(data, forKey: "timerState")
-            userDefaults.synchronize()
             logger.info("状态保存成功")
         } catch {
             logger.error("状态保存失败: \(error.localizedDescription)")

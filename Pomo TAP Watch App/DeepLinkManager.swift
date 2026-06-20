@@ -55,38 +55,6 @@ class DeepLinkManager: ObservableObject {
     private var lastExecutionTime: [DeepLinkAction: Date] = [:]
     private let minimumExecutionInterval: TimeInterval = 1.0  // 1秒内不重复执行相同操作
 
-    // 执行统计
-    @Published private(set) var executionStats: ExecutionStats = ExecutionStats()
-
-    // MARK: - 执行统计结构
-    struct ExecutionStats {
-        var totalRequests: Int = 0
-        var successfulExecutions: Int = 0
-        var duplicateRequests: Int = 0
-        var failedExecutions: Int = 0
-
-        var successRate: Double {
-            guard totalRequests > 0 else { return 0 }
-            return Double(successfulExecutions) / Double(totalRequests)
-        }
-
-        mutating func recordRequest() {
-            totalRequests += 1
-        }
-
-        mutating func recordSuccess() {
-            successfulExecutions += 1
-        }
-
-        mutating func recordDuplicate() {
-            duplicateRequests += 1
-        }
-
-        mutating func recordFailure() {
-            failedExecutions += 1
-        }
-    }
-
     // MARK: - Initialization
     init(timerModel: TimerModel) {
         self.timerModel = timerModel
@@ -97,13 +65,10 @@ class DeepLinkManager: ObservableObject {
     /// - Parameter url: 深度链接URL
     /// - Returns: 执行结果
     func handleDeepLink(_ url: URL) async -> DeepLinkResult {
-        executionStats.recordRequest()
-
         // 1. 验证URL格式
         guard url.scheme == "pomoTAP" else {
             let error = "不支持的URL scheme: \(url.scheme ?? "nil")"
             logger.warning("\(error)")
-            executionStats.recordFailure()
             return .failed(error: error)
         }
 
@@ -112,13 +77,11 @@ class DeepLinkManager: ObservableObject {
               let action = DeepLinkAction(rawValue: host) else {
             let error = "不支持的操作: \(url.host ?? "nil")"
             logger.warning("\(error)")
-            executionStats.recordFailure()
             return .unsupported(action: url.host ?? "unknown")
         }
 
         // 3. 幂等性检查
         if let duplicate = checkForDuplicateExecution(action: action) {
-            executionStats.recordDuplicate()
             return duplicate
         }
 
@@ -151,7 +114,6 @@ class DeepLinkManager: ObservableObject {
         guard let timerModel = timerModel else {
             let error = "TimerModel 引用丢失"
             logger.error("\(error)")
-            executionStats.recordFailure()
             return .failed(error: error)
         }
 
@@ -160,65 +122,29 @@ class DeepLinkManager: ObservableObject {
         switch action {
         case .open:
             // 打开应用 - 无需具体操作
-            executionStats.recordSuccess()
             return .success(message: "应用已打开")
 
         case .startWork:
             timerModel.startWorkPhaseDirectly()
-            executionStats.recordSuccess()
             return .success(message: "工作阶段已开始")
 
         case .startBreak:
             timerModel.startBreakPhaseDirectly()
-            executionStats.recordSuccess()
             return .success(message: "短休息已开始")
 
         case .startLongBreak:
             timerModel.startLongBreakPhaseDirectly()
-            executionStats.recordSuccess()
             return .success(message: "长休息已开始")
 
         case .toggle:
             await timerModel.toggleTimer()
             let message = timerModel.timerRunning ? "计时器已启动" : "计时器已暂停"
-            executionStats.recordSuccess()
             return .success(message: message)
 
         case .skipPhase:
             await timerModel.skipCurrentPhase()
-            executionStats.recordSuccess()
             return .success(message: "已跳过当前阶段")
         }
-    }
-
-    // MARK: - 诊断和监控方法
-
-    /// 获取执行统计报告
-    func getExecutionReport() -> String {
-        let stats = executionStats
-        return """
-        📊 深度链接执行统计:
-        • 总请求数: \(stats.totalRequests)
-        • 成功执行: \(stats.successfulExecutions)
-        • 重复请求: \(stats.duplicateRequests)
-        • 执行失败: \(stats.failedExecutions)
-        • 成功率: \(String(format: "%.1f", stats.successRate * 100))%
-        """
-    }
-
-    /// 重置统计数据
-    func resetStatistics() {
-        executionStats = ExecutionStats()
-        lastExecutionTime.removeAll()
-        logger.info("深度链接统计数据已重置")
-    }
-
-    /// 获取最近执行历史
-    func getRecentExecutions() -> [String] {
-        return lastExecutionTime.map { action, time in
-            let timeAgo = Date().timeIntervalSince(time)
-            return "\(action.description): \(String(format: "%.1f", timeAgo))秒前"
-        }.sorted()
     }
 }
 
@@ -227,7 +153,6 @@ extension DeepLinkManager {
     /// 快速处理URL字符串
     func handleDeepLink(_ urlString: String) async -> DeepLinkResult {
         guard let url = URL(string: urlString) else {
-            executionStats.recordFailure()
             return .failed(error: "无效的URL字符串: \(urlString)")
         }
         return await handleDeepLink(url)

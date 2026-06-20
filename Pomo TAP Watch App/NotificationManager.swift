@@ -5,9 +5,6 @@ import os
 // MARK: - 通知管理
 @MainActor
 class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterDelegate {
-    // MARK: - Published Properties
-    @Published var notificationPermissionStatus: UNAuthorizationStatus = .notDetermined
-
     // MARK: - Private Properties
     private let logger = Logger(subsystem: "com.songquan.pomoTAP", category: "NotificationManager")
     weak var timerModel: TimerModel?
@@ -42,13 +39,11 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         }
     }
 
-    func checkNotificationPermissionStatus() async {
-        let settings = await UNUserNotificationCenter.current().notificationSettings()
-        self.notificationPermissionStatus = settings.authorizationStatus
-        logger.info("当前通知权限状态: \(settings.authorizationStatus.rawValue)")
-    }
-
-    func sendNotification(for event: NotificationEvent, currentPhaseDuration: Int, nextPhaseDuration: Int) {
+    /// 安排阶段完成通知。
+    /// - Parameters:
+    ///   - currentPhaseDurationSeconds: 当前阶段剩余时间（**秒**），用作触发器间隔。
+    ///   - nextPhaseDurationMinutes: 下一阶段时长（**分钟**），仅用于通知正文展示。
+    func sendNotification(for event: NotificationEvent, currentPhaseDurationSeconds: Int, nextPhaseDurationMinutes: Int) {
         Task {
             do {
                 // 检查权限状态
@@ -59,8 +54,8 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
                 }
 
                 // 验证参数
-                guard currentPhaseDuration > 0, nextPhaseDuration > 0 else {
-                    logger.error("无效的阶段持续时间: 当前=\(currentPhaseDuration), 下一个=\(nextPhaseDuration)")
+                guard currentPhaseDurationSeconds > 0, nextPhaseDurationMinutes > 0 else {
+                    logger.error("无效的阶段持续时间: 当前=\(currentPhaseDurationSeconds)秒, 下一个=\(nextPhaseDurationMinutes)分")
                     return
                 }
 
@@ -83,14 +78,14 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
 
                     content.body = String(
                         format: NSLocalizedString("Notification_Body", comment: "通知内容：%d = 持续时间（分钟），%@ = 阶段类型"),
-                        nextPhaseDuration,
+                        nextPhaseDurationMinutes,
                         nextPhaseType
                     )
                 }
 
                 // 创建触发器 - 使用剩余时间（秒）
                 let trigger = UNTimeIntervalNotificationTrigger(
-                    timeInterval: TimeInterval(currentPhaseDuration),  // ✅ 修正：直接使用秒数
+                    timeInterval: TimeInterval(currentPhaseDurationSeconds),  // 直接使用秒数
                     repeats: false
                 )
 
@@ -108,12 +103,12 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
 
                 // 添加新通知
                 try await UNUserNotificationCenter.current().add(request)
-                logger.info("通知已安排: \(requestIdentifier), \(currentPhaseDuration)秒后触发")
+                logger.info("通知已安排: \(requestIdentifier), \(currentPhaseDurationSeconds)秒后触发")
 
                 // 如果启用了重复提醒，调度重复通知
                 if let timerModel = timerModel, timerModel.enableRepeatNotifications {
                     await repeatManager.scheduleRepeatNotifications(
-                        initialDelay: TimeInterval(currentPhaseDuration),
+                        initialDelay: TimeInterval(currentPhaseDurationSeconds),
                         title: content.title,
                         body: content.body
                     )
@@ -151,12 +146,8 @@ class NotificationManager: NSObject, ObservableObject, UNUserNotificationCenterD
         willPresent notification: UNNotification,
         withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void
     ) {
-        // watchOS 26 通知展示：使用 list/banner + sound，避免使用已废弃的 .alert
-        if #available(watchOS 10.0, *) {
-            completionHandler([.list, .sound])
-        } else {
-            completionHandler([.banner, .sound])
-        }
+        // watchOS 26 通知展示：前台也使用 list + sound（部署下限 26，无需版本判断，避免已废弃的 .alert）
+        completionHandler([.list, .sound])
     }
 
     // MARK: - Private Methods

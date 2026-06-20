@@ -13,10 +13,6 @@ class BackgroundSessionManager: NSObject, ObservableObject, WKExtendedRuntimeSes
     @Published private(set) var sessionMetrics: SessionMetrics = SessionMetrics()  // 新增：会话指标
 
     // MARK: - Public Computed Properties
-    var isSessionActive: Bool {
-        extendedSession?.state == .running && sessionRetainCount > 0
-    }
-
     var canStartNewSession: Bool {
         sessionState == .none && !isStarting && extendedSession == nil
     }

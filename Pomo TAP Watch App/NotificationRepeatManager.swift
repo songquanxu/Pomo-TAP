@@ -10,7 +10,6 @@ class NotificationRepeatManager: ObservableObject {
 
     // MARK: - Constants
     private let repeatCount = 3  // 重复 3 次通知
-    private let repeatInterval: TimeInterval = 60  // 每次间隔 1 分钟（60 秒）
 
     // MARK: - Public Methods
 
@@ -128,21 +127,4 @@ class NotificationRepeatManager: ObservableObject {
         }
     }
 
-    /// 获取重复通知状态 - 调试和监控
-    func getRepeatNotificationStatus() async -> (pending: Int, identifiers: [String]) {
-        let pendingRequests = await UNUserNotificationCenter.current().pendingNotificationRequests()
-        let repeatRequests = pendingRequests.filter { $0.identifier.hasPrefix("PomoTAP_Repeat_") }
-
-        let identifiers = repeatRequests.map { $0.identifier }
-        logger.debug("📊 重复通知状态：\(repeatRequests.count) 个待发送")
-
-        return (pending: repeatRequests.count, identifiers: identifiers)
-    }
-
-    /// 取消所有通知（包括普通通知和重复通知）
-    func cancelAllNotifications() {
-        UNUserNotificationCenter.current().removeAllPendingNotificationRequests()
-        UNUserNotificationCenter.current().removeAllDeliveredNotifications()
-        logger.info("已取消所有通知（普通 + 重复）")
-    }
 }

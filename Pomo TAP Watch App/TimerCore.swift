@@ -53,6 +53,7 @@ class TimerCore: NSObject, ObservableObject {
     private var endTime: Date?
     private var pausedRemainingTime: Int?
     private var lastCountdownHapticSecond: Int?
+    private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Exposed Timing Metadata
     var countdownEndDate: Date? {
@@ -89,9 +90,6 @@ class TimerCore: NSObject, ObservableObject {
             }
             .store(in: &cancellables)
     }
-    
-    // MARK: - Private Properties for Combine
-    private var cancellables = Set<AnyCancellable>()
 
     // MARK: - Public Methods
     func startTimer() async {
@@ -138,18 +136,6 @@ class TimerCore: NSObject, ObservableObject {
         timerRunning = false
 
         logger.info("计时器已停止。剩余时间: \(self.remainingTime) 秒。")
-    }
-
-    func pauseTimer() {
-        stopTimer()
-    }
-
-    func resumeTimer() async {
-        if let pausedTime = pausedRemainingTime {
-            remainingTime = pausedTime
-            pausedRemainingTime = nil
-            await startTimer()
-        }
     }
 
     func resetTimer() {

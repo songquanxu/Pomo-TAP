@@ -45,7 +45,7 @@ struct WidgetStateAdapter {
 }
 
 // MARK: - Complication Display Model
-struct ComplicationDisplayState {
+struct ComplicationDisplayState: Sendable {
     let displayMode: PhaseDisplayMode
     let phaseType: PhaseCategory
     let isRunning: Bool
@@ -65,10 +65,6 @@ struct ComplicationDisplayState {
 
     var isInFlow: Bool {
         displayMode == .flow
-    }
-
-    var effectiveTimeIndicator: Int {
-        isInFlow ? flowElapsed : countdownRemaining
     }
 }
 

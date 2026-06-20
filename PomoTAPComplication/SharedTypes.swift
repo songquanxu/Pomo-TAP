@@ -1,20 +1,20 @@
 import Foundation
 
-enum PhaseDisplayMode: String, Codable {
+enum PhaseDisplayMode: String, Codable, Sendable {
     case countdown
     case flow
     case paused
     case idle
 }
 
-enum PhaseCategory: String, Codable {
+enum PhaseCategory: String, Codable, Sendable {
     case work
     case shortBreak
     case longBreak
     case unknown
 }
 
-struct SharedTimerState: Codable {
+struct SharedTimerState: Codable, Sendable {
     let currentPhaseIndex: Int
     let remainingTime: Int
     let timerRunning: Bool
@@ -44,19 +44,6 @@ struct SharedTimerState: Codable {
             return 1.0 - Double(remainingTime) / Double(totalTime)
         case .idle:
             return 0
-        }
-    }
-
-    var standardizedPhaseName: String {
-        switch currentPhaseType {
-        case .work:
-            return "work"
-        case .shortBreak:
-            return "shortBreak"
-        case .longBreak:
-            return "longBreak"
-        case .unknown:
-            return currentPhaseName.lowercased()
         }
     }
 
@@ -165,7 +152,7 @@ struct SharedTimerState: Codable {
     }
 }
 
-struct PhaseInfo: Codable {
+struct PhaseInfo: Codable, Sendable {
     let duration: Int
     let name: String
     let status: String
@@ -195,24 +182,11 @@ struct PhaseInfo: Codable {
 }
 
 // MARK: - Phase Completion Status
-enum PhaseCompletionStatus: String, Codable {
+enum PhaseCompletionStatus: String, Codable, Sendable {
     case notStarted
     case current
     case normalCompleted
     case skipped
-
-    var displayColor: String {
-        switch self {
-        case .normalCompleted:
-            return "orange"
-        case .skipped:
-            return "green"
-        case .current:
-            return "blue"
-        case .notStarted:
-            return "gray"
-        }
-    }
 }
 
 // MARK: - Control ↔ App 桥接（App Group）
